@@ -10,6 +10,8 @@
   <a href="https://github.com/movemontes/treco/releases/latest/download/Treco-mac.dmg">⬇️ Baixar para Mac</a>
 </h3>
 
+<p align="center">🌐 <a href="https://movemontes.github.io/treco/">movemontes.github.io/treco</a></p>
+
 <p align="center">Grátis · Sem conta · Sem anúncio · Nada sai do seu computador</p>
 
 ---
