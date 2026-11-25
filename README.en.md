@@ -78,7 +78,7 @@ Treco is and will stay free. I made it on my own and I've got 5 mouths to feed �
 
 <!-- donation link (USD) here -->
 
-In Brazil: **Pix** (random key, PicPay): `e2a1f4a9-ebfe-4c3c-a531-92a0e7433f14`
+Donations are coming soon. In the meantime, a ⭐ on this repo helps a lot too.
 
 Thank you so much! — Mateus
 
