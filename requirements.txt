@@ -1,0 +1,23 @@
+# Versões usadas na build de Windows (Python 3.12)
+pillow==13.0.0
+pillow-heif==1.8.1
+tkinterdnd2==0.7.0
+pystray==0.19.5
+pymupdf==2.1
+pymupdf4llm==2.1
+pypandoc-binary==1.17
+pandas==3.1.1
+openpyxl==3.1.5
+odfpy==1.4.1
+xlrd==2.0.2
+python-pptx==1.0.2
+certifi
+yt-dlp[default]==2026.11.23
+pyinstaller==6.22.3
+pywin32; sys_platform == "win32"
+pyobjc-framework-Cocoa; sys_platform == "darwin"
+pyobjc-framework-Quartz; sys_platform == "darwin"
+pyobjc-framework-Vision; sys_platform == "darwin"
+segno==1.6.6
+
+# Fora do Python: ffmpeg com os filtros whisper e ass

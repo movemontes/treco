@@ -1,0 +1,30 @@
+# Ambiente Python (recriado com: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt)
+.venv/
+__pycache__/
+*.pyc
+
+# Gerado no próprio Mac por vendor/make_mac_app.py
+Treco.app/
+
+# Programas e modelos grandes: recriados por vendor/build_ffmpeg.sh e baixados de novo
+vendor/bin/ffmpeg
+vendor/bin/ffprobe
+vendor/models/
+
+# Material original da skin (pesado; fica só no Mac)
+design/skin_recebida/
+
+.DS_Store
+
+# Saída do vendor/build_mac.py
+build/
+dist/
+
+# Instruções antigas de quando o Treco veio do Windows (só para este Mac)
+LEIA-ME.txt
+# Imagens de referência de origem desconhecida
+design/Treco-Skin-Higgsfield/referencias/
+design/Treco-Skin-Higgsfield.zip
+
+# Material interno de design (fica só no Mac)
+design/
