@@ -10,6 +10,17 @@ from .tool_dialogs import ToolDialog
 from .welcome import wrap
 
 
+def short_notes(body):
+    """Só a parte do idioma do app (entre <!-- pt --> e <!-- /pt -->), sem os símbolos de formatação."""
+    import re
+    from ..core.i18n import english
+    lang = "en" if english() else "pt"
+    match = re.search(rf"<!--\s*{lang}\s*-->(.*?)<!--\s*/{lang}\s*-->", body, re.S)
+    text = match.group(1) if match else re.sub(r"<!--.*?-->", "", body, flags=re.S)
+    text = re.sub(r"[*#`>]", "", text)
+    return re.sub(r"(^|\n)\s*-\s+", r"\1• ", text).strip()
+
+
 class UpdateDialog(ToolDialog):
     def __init__(self, app, info):
         super().__init__(app, "Atualização", 300, 150)
@@ -24,7 +35,7 @@ class UpdateDialog(ToolDialog):
         y += 20
         g.text(x, y, f"Você tem a versão {VERSION}.", DARK)
         y += 16
-        notes = " ".join(self.info.get("notes", "").split())[:160]
+        notes = " ".join(short_notes(self.info.get("notes", "")).split())[:160]
         for part in wrap(notes, self.dw - 2 * x)[:3]:
             g.text(x, y, part, DARK)
             y += 12
