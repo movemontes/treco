@@ -65,6 +65,7 @@ Segure **Shift** e arraste um arquivo no Finder: as ações aparecem em volta do
 - **Microfone:** para gravar a voz.
 - **Pasta Downloads:** para o Limpar Downloads.
 - **Controlar o Finder:** só ao desinstalar apps da App Store (o Finder pede a sua senha).
+- **Acesso Total ao Disco** (opcional): para o Desinstalar apagar as pastas de dados que o macOS protege.
 
 A Roda do Shift não precisa de nenhuma permissão.
 

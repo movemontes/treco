@@ -294,6 +294,7 @@ class UninstallDialog(BackgroundDialog):
         self.path = path
         self.info = uninstall.app_info(path)
         self.marked = set()
+        self.unsure = set()
         self.scroll = 0
         self.done = None
         self.host.frame()
@@ -301,13 +302,14 @@ class UninstallDialog(BackgroundDialog):
 
     def find(self):
         from ..modules import uninstall
-        found = [(self.path, cleanup.folder_size(self.path))] + uninstall.leftovers(self.path)
-        return found
+        found = [(self.path, cleanup.folder_size(self.path), True)] + uninstall.scan(self.path)
+        self.unsure = {p for p, _, sure in found if not sure}
+        return [(p, s) for p, s, _ in found]
 
     def finish(self, value, error):
         super().finish(value, error)
         if value and self.done is None:
-            self.marked = {p for p, _ in value}
+            self.marked = {p for p, _ in value if p not in self.unsure}
 
     def body(self, ui):
         from ..modules import uninstall
@@ -323,10 +325,23 @@ class UninstallDialog(BackgroundDialog):
         if self.done is not None:
             ok, failed = self.result
             g.text(x, y, fit(f"{name} foi para o Lixo." if ok else f"Não consegui tirar {name}.", w, True), BLUE if ok else AMBER, True, 1.3)
-            g.text(x, y + 22, f"{len(self.marked) - len(failed)} itens no Lixo. Dá para recuperar até esvaziar o Lixo.", INK)
+            g.text(x, y + 22, f"{len(self.done) - len(failed)} itens no Lixo. Dá para recuperar até esvaziar o Lixo.", INK)
             if failed:
-                g.text(x, y + 36, fit("Ficaram: " + ", ".join(failed), w), DARK)
-            ui.button("ok", self.dw - 84, self.dh - 31, 70, 17, "OK", on=self.close, tone=AMBER, bold=True)
+                ty = y + 44
+                g.text(x, ty, fit(f"Faltaram {len(failed)} itens que o macOS protege.", w, True), AMBER, True)
+                for line in ("Para apagar, libere o Treco em Acesso Total ao Disco",
+                             "(Ajustes do Sistema) e clique em Tentar de novo.",
+                             "Se não der, feche e abra o Treco antes."):
+                    ty += 15
+                    g.text(x, ty, fit(line, w), INK)
+                ty += 8
+                for path in failed[:6]:
+                    ty += 14
+                    g.text(x, ty, fit(path.replace(os.path.expanduser("~/Library/"), "").replace(os.path.expanduser("~/"), "~/"), w), DARK)
+                by = self.dh - 31
+                ui.button("settings", x, by, 110, 17, "Abrir Ajustes", on=self.open_settings)
+                ui.button("again", x + 116, by, 110, 17, "Tentar de novo", on=lambda: self.retry(failed), tone=AMBER, bold=True)
+            ui.button("ok", self.dw - 84, self.dh - 31, 70, 17, "OK", on=self.close, tone=None if failed else AMBER, bold=not failed)
             return
         items = self.result
         g.text(x, y + 1, fit(f"{name} e o que ele guardou no Mac:", w, True), INK, True)
@@ -347,7 +362,9 @@ class UninstallDialog(BackgroundDialog):
             g.rect(x + 6, ry + 4, 10, 10, fill=tone if on else WHITE, line=tone)
             if on:
                 g.icon("x", x + 7, ry + 5, 8, WHITE)
-            label = os.path.basename(path) if path == self.path else path.replace(home, "")
+            label = os.path.basename(path) if path == self.path else path.replace(home, "").replace(os.path.expanduser("~/"), "~/")
+            if path in self.unsure:
+                label = "? " + label
             size_text = human_size(size)
             g.right(x + lw - 4, ry + 5, size_text, DARK)
             g.text(x + 22, ry + 5, fit(label, lw - 34 - text_width(size_text), on), tone, on or path == self.path)
@@ -360,6 +377,8 @@ class UninstallDialog(BackgroundDialog):
         if busy:
             g.text(x, by + 2, fit(f"{name} está aberto: feche antes.", w - 100, True), AMBER, True)
             ui.button("quit", x + w - 96, by - 2, 96, 16, f"Fechar {name}"[:18], on=lambda: uninstall.quit_app(self.info["id"]))
+        elif self.unsure:
+            g.text(x, by + 2, fit("Com ? pode ser de outro app: marque se tiver certeza.", w), DARK)
         else:
             g.text(x, by + 2, "Desmarque o que quiser manter.", DARK)
         by += 20
@@ -372,15 +391,24 @@ class UninstallDialog(BackgroundDialog):
         self.done = paths
         self.work(self.remove, paths)
 
+    def retry(self, paths):
+        self.done = list(paths)
+        self.work(self.remove, list(paths))
+
+    def open_settings(self):
+        import subprocess
+        subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"])
+
     def remove(self, paths):
+        """Manda para o Lixo. Devolve (o app saiu?, caminhos que ficaram)."""
         from ..modules import uninstall
         others = [p for p in paths if p != self.path]
-        moved, failed = cleanup.to_trash(others) if others else (0, [])
+        failed = uninstall.trash_all(others)
         ok = True
         if self.path in paths:
             ok = uninstall.trash_app(self.path)
             if not ok:
-                failed.append(os.path.basename(self.path))
+                failed.append(self.path)
         return ok, failed
 
 

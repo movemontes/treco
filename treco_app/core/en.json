@@ -768,5 +768,12 @@
 "Não consegui ver se tem versão nova": "Couldn't check for a new version",
 "Você já tem a versão mais nova": "You already have the latest version",
 "Procurar atualização…": "Check for updates…",
-"O arquivo baixado não tem o Treco": "The download doesn't contain Treco"
+"O arquivo baixado não tem o Treco": "The download doesn't contain Treco",
+"Com ? pode ser de outro app: marque se tiver certeza.": "? may belong to another app: check it only if you're sure.",
+"Faltaram {} itens que o macOS protege.": "{} items are protected by macOS.",
+"Para apagar, libere o Treco em Acesso Total ao Disco": "To remove them, allow Treco in Full Disk Access",
+"(Ajustes do Sistema) e clique em Tentar de novo.": "(System Settings) and click Try again.",
+"Se não der, feche e abra o Treco antes.": "If that doesn't work, quit and reopen Treco first.",
+"Abrir Ajustes": "Open Settings",
+"Tentar de novo": "Try again"
 }

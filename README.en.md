@@ -65,6 +65,7 @@ Hold **Shift** and drag a file in Finder: the actions pop up around your cursor.
 - **Microphone:** to record your voice.
 - **Downloads folder:** for Clean Downloads.
 - **Control Finder:** only when uninstalling App Store apps (Finder asks for your password).
+- **Full Disk Access** (optional): lets Uninstall remove the data folders macOS protects.
 
 The Shift wheel needs no permissions.
 
