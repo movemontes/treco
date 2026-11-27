@@ -56,6 +56,7 @@ def build_app():
                "--distpath", DIST, "--workpath", WORK, "--specpath", WORK,
                "--add-data", f"{ROOT}/treco_app/ui/fonts{sep}treco_app/ui/fonts",
                "--add-data", f"{ROOT}/treco_app/ui/skin{sep}treco_app/ui/skin",
+               "--add-data", f"{ROOT}/treco_app/ui/mascote{sep}treco_app/ui/mascote",  # o Disquetinho
                "--add-data", f"{ROOT}/treco_app/core/en.json{sep}treco_app/core",  # tradução para inglês
                "--collect-submodules", "treco_app",  # muitos módulos são importados só na hora do uso
                "--collect-all", "tkinterdnd2", "--collect-all", "pypandoc", "--collect-data", "certifi",

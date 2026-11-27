@@ -98,9 +98,11 @@ class WelcomeDialog(ToolDialog):
         super().close()
 
 
-def show_once(app):
-    """Abre o recado se a pessoa ainda não viu."""
+def show_once(app, then=None):
+    """Abre o recado se a pessoa ainda não viu. Depois (ou se já viu), chama then()."""
     seen = prefs.get("welcome_seen")
     if seen is not False and isinstance(seen, int) and seen >= VERSION:
+        if then:
+            then()
         return None
-    return WelcomeDialog(app)
+    return WelcomeDialog(app, on_close=then)

@@ -16,9 +16,10 @@ from ..core.i18n import english, tr
 from ..core.log import log_error
 from ..version import VERSION
 from ..core.paths import MAC
+from . import mascot
 from .icons import KIND_ICON
 from .pill import ProgressPill
-from .pixel import BLUE, DARK, INK, RED, WHITE, fit, text_width
+from .pixel import BLUE, CREAM, DARK, GRAY, INK, RED, SKY, WHITE, fit, mix, text_width
 from .toolkit import PixelHost, TextField, pick_scale
 
 try:
@@ -27,15 +28,33 @@ try:
 except Exception:
     DND_OK = False
 
-W, H = 400, 480
-MIN_W, MIN_H = 320, 400  # menor que isso os botões não cabem
-HEADER_H, FILES_H, FOOTER_H = 30, 112, 28
-PAD, GAP, TILE_SMALL = 6, 4, 34  # margem, espaço entre quadrados, altura do quadrado com uma categoria aberta
+W, H = 440, 540
+MIN_W, MIN_H = 340, 420  # menor que isso os botões não cabem
+RAIL_W, TOP_H, BAR_H = 66, 24, 34  # trilho preto à esquerda, faixa de cima e barra de baixo
+PAD, CHIP_H = 12, 17  # margem da área principal e altura das etiquetas de arquivo
+HEADER_H, FOOTER_H = TOP_H, BAR_H  # nomes antigos (usados por outras janelas)
 # categorias da tela; as três primeiras só aparecem com arquivo na lista
 CATEGORIES = (("convert", "Converter", "convert"), ("compress", "Comprimir", "compress"), ("edit", "Editar", "edit"),
               ("av", "Vídeo e áudio", "video"), ("image", "Imagem", "image"), ("docs", "Documentos", "doc"),
               ("download", "Baixar", "download"), ("utils", "Utilidades", "tools"))
 TABS = CATEGORIES
+NEEDS_FILES = {"convert", "compress", "edit"}
+RAIL_LABEL = {"av": "Vídeo", "docs": "Docs"}  # nomes curtos no trilho
+LEADS = {"convert": "Escolha o formato novo. O original fica como está.",
+         "compress": "Deixa o arquivo menor para mandar ou guardar.",
+         "edit": "Gire, corte e ajuste todos os arquivos da lista.",
+         "av": "Legenda, transcrição e gravação de tela e voz.",
+         "image": "Fotos em PDF, fundo, texto e rostos.",
+         "docs": "Resumo, texto, senha e tradução.",
+         "download": "Cole o link de um vídeo da internet.",
+         "utils": "Atalhos rápidos para o dia a dia no Mac."}
+# frase curta embaixo do nome de cada ação nos cartões
+DESC = {"direita": "Gira 90° para a direita", "esquerda": "Gira 90° para a esquerda", "180": "Vira de ponta-cabeça",
+        "espelhar": "Inverte de lado, como espelho", "inverter": "Vira de cima para baixo",
+        "trim": "Fica só o trecho que você marcar", "crop": "Tira as bordas", "resize": "Menor, maior ou 1080p",
+        "mute": "Tira o áudio do vídeo", "speed": "Deixa mais rápido", "slow": "Câmera lenta",
+        "volume": "Som mais alto ou mais baixo", "clean": "Tira dados escondidos do arquivo",
+        "join": "Junta tudo num arquivo só", "split": "Separa as páginas do PDF"}
 # botões de cada categoria (os que não existem neste computador somem sozinhos)
 TAB_TOOLS = {"av": ("caption", "transcribe", "mark", "rec_voice", "rec_screen", "rec_both"),
              "image": ("photos_pdf", "scan", "slideshow", "nobg", "ocr", "faces", "mark"),
@@ -185,6 +204,9 @@ class App:
         self.spots = {}
         self.menu = None
         self.about = False
+        self.tour = None  # passo do tour do Disquetinho (None = fora do tour)
+        self.tip = None  # dica que o mouse está esperando: (chave, área, texto)
+        self.tip_key, self.tip_since = None, 0.0
         self.quality = 90
         self.target = TextField("16", 7)
         self.scroll = 0
@@ -218,20 +240,28 @@ class App:
         if self.menu is None and not self.about and self.context_menu is None:
             ui.resize_grip((MIN_W, MIN_H, self.max_w, self.max_h), self.resized)
         ui.chassis()
-        ui.enabled = self.menu is None and not self.about and self.context_menu is None
-        self.draw_files(ui)
-        self.draw_actions(ui)
+        ui.enabled = self.menu is None and not self.about and self.context_menu is None and self.tour is None
+        self.tip = None
+        kinds = {r.kind for r in self.rows.values()}
+        if self.tab is None and self.rows:
+            self.tab = "convert"  # chegou arquivo: já mostra Converter
+        self.draw_main(ui, kinds)
         self.draw_footer(ui)
-        ui.enabled = not self.about
+        self.draw_rail(ui, kinds)
+        ui.enabled = not self.about and self.tour is None
         self.draw_header(ui)
-        if self.about:
+        if self.tour is not None:
+            ui.enabled = True
+            self.draw_tour(ui)
+        elif self.about:
             ui.enabled = True
             self.draw_about(ui)
         elif self.context_menu:
             ui.enabled = True
             self.draw_context(ui)
-        if not self.about:
+        if not self.about and self.tour is None:
             ui.draw_grip(INK)
+        self.draw_tip(ui)
 
     def status_line(self):
         done = sum(1 for r in self.rows.values() if r.done_path)
@@ -247,50 +277,44 @@ class App:
         return "Tudo no seu computador", DARK
 
     def draw_header(self, ui):
+        """Faixa de cima da área principal: situação, minimizar e fechar. O menu do Treco abre no logo."""
         g = ui.g
-        g.rect(0, 0, self.w, HEADER_H, fill=WHITE)
-        g.hline(0, HEADER_H - 1, self.w, INK)
-        g.hline(0, HEADER_H - 2, self.w, INK)
-        menus = self.menus()
-        label_w = text_width("TRECO", True, 1.9) + 14
-        hover, _, _ = ui.clickable(("menu", "Treco"), 0, 0, label_w + 10, HEADER_H - 2)
-        selected = self.menu == "Treco"
-        if hover and ui.pressed:
-            self.menu = None if selected else "Treco"
-            selected = self.menu == "Treco"
-        if selected:
-            g.rect(0, 0, label_w + 10, HEADER_H - 2, fill=INK)
-        g.text(9, 4, "TRECO", WHITE if selected else BLUE if hover else INK, True, 1.9)
+        x0 = RAIL_W
         text, color = self.status_line()
-        g.right(self.w - 42, 10, fit(text, 210), color)
-        for key, kx, name, action in (("min", self.w - 37, "min", self.host.minimize), ("hide", self.w - 20, "x", self.hide_window)):
-            over, held, clicked = ui.clickable(("win", key), kx, 6, 16, 16)
-            g.icon(name, kx + 1, 7, 14, BLUE if over else INK)
+        g.text(x0 + PAD, 9, fit(text, self.w - x0 - PAD - 60), DARK if color == INK else color, False, .9)
+        for key, kx, name, action in (("min", self.w - 44, "min", self.host.minimize), ("hide", self.w - 24, "x", self.hide_window)):
+            over, held, clicked = ui.clickable(("win", key), kx, 5, 15, 15)
+            ui.face(kx, 5, 15, 15, over, held, key=("win", key))
+            ui.g.icon(name, kx + 2 + ui.shift, 7 + ui.shift, 11, ui.ink(over, held))
             if clicked:
                 ui.later(action)
         if self.menu is None:
-            ui.drag_area(label_w + 10, 0, self.w - label_w - 56, HEADER_H - 2)
+            ui.drag_area(x0, 0, self.w - x0 - 50, TOP_H)
             return
-        items = menus["Treco"]
+        items = self.menus()["Treco"]
         mw = max(text_width(i[0], True) for i in items if i) + 24
         mh = sum(17 if i else 5 for i in items) + 6
-        g.rect(0, HEADER_H - 2, mw, mh, fill=WHITE, line=INK)
-        g.rect(1, HEADER_H - 1, mw - 2, mh - 2, line=INK)
-        iy = HEADER_H + 1
-        inside = ui.over(0, HEADER_H - 2, mw, mh)
+        mx, my = 8, 52
+        g.rect(mx + 3, my + 3, mw, mh, fill=BLUE)
+        g.rect(mx, my, mw, mh, fill=WHITE, line=INK)
+        g.rect(mx + 1, my + 1, mw - 2, mh - 2, line=INK)
+        iy = my + 3
+        inside = ui.over(mx, my, mw, mh)
         for item in items:
             if item is None:
-                g.hline(0, iy + 2, mw, INK)
+                g.hline(mx, iy + 2, mw, INK)
                 iy += 5
                 continue
-            over = ui.over(2, iy, mw - 4, 17)
-            g.text(10, iy + 4, item[0], BLUE if over else INK, over)
+            over = ui.over(mx + 2, iy, mw - 4, 17)
+            if over:
+                g.rect(mx + 2, iy, mw - 4, 17, fill=BLUE)
+            g.text(mx + 10, iy + 4, item[0], WHITE if over else INK, over)
             if over and ui.released:
                 self.menu = None
                 ui.later(item[1])
                 ui.later(ui.invalidate)
             iy += 17
-        if ui.pressed and not inside and not hover:
+        if ui.pressed and not inside and not ui.over(0, 0, RAIL_W, 52):
             self.menu = None
             ui.later(ui.invalidate)
 
@@ -298,7 +322,9 @@ class App:
         from .tray import autostart_on, autostart_toggle
         start = "Iniciar com o Mac" if MAC else "Iniciar com o Windows"
         return {"Treco": [("Adicionar arquivos…", self.pick_files), ("Adicionar pasta…", self.pick_folder), None,
-                          (("✓ " if autostart_on() else "") + start, autostart_toggle), ("Sobre o Treco", self.show_about), None,
+                          (("✓ " if autostart_on() else "") + tr(start), autostart_toggle),
+                          (("✓ " if mascot.enabled() else "") + tr("Disquetinho"), self.toggle_mascot),
+                          ("Ver o tour", self.start_tour), ("Sobre o Treco", self.show_about), None,
                           ("Esconder", self.hide_window), ("Sair", self.quit)]}
 
     # --- categorias em quadrados; a escolhida se abre embaixo com as opções
@@ -314,96 +340,143 @@ class App:
             shown.append((key, label, image))
         return shown
 
-    def category_rows(self, cats):
-        count = len(cats)
-        columns = count if count <= 3 else 3 if count <= 6 else 4
-        if self.w < 380:  # janela estreita: no máximo 3 por linha
-            columns = min(columns, 3)
-        return [cats[i:i + columns] for i in range(0, count, columns)]
-
-    def segment_targets(self, rows, total):
-        """Altura de cada linha de quadrados e da área aberta embaixo de cada uma."""
-        inner = total - 2 * PAD - GAP * (len(rows) - 1)
-        opened = next((r for r, row in enumerate(rows) if any(c[0] == self.tab for c in row)), None)
-        if opened is None:
-            return [v for _ in rows for v in (inner / len(rows), 0)]
-        panel = inner - TILE_SMALL * len(rows)
-        return [v for r in range(len(rows)) for v in (TILE_SMALL, panel if r == opened else 0)]
-
-    def step_segments(self, targets, signature):
-        if self.row_h is None or self.layout != signature:
-            self.row_h, self.layout = list(targets), signature  # categorias mudaram: sem animação
-        moving = False
-        for i, target in enumerate(targets):
-            gap = target - self.row_h[i]
-            if abs(gap) < .7:
-                self.row_h[i] = target
-            else:
-                self.row_h[i] += gap * .38
-                moving = True
-        if moving:
-            self.root.after(16, self.host.invalidate)
-        return moving
-
-    def draw_actions(self, ui):
+    # --- trilho preto à esquerda: o logo (abre o menu) e os assuntos, um embaixo do outro
+    def draw_rail(self, ui, kinds):
         g = ui.g
-        top = HEADER_H + self.files_h
-        total = self.h - FOOTER_H - top
-        kinds = {r.kind for r in self.rows.values()}
-        cats = self.categories(kinds)
-        if self.tab not in [c[0] for c in cats]:
-            self.tab = None
-        rows = self.category_rows(cats)
-        moving = self.step_segments(self.segment_targets(rows, total), tuple(c[0] for c in cats))
-        y = top + PAD
-        for r, row in enumerate(rows):
-            h = self.row_h[2 * r]
-            each = (self.w - 2 * PAD - GAP * (len(row) - 1)) / len(row)
-            opened = None
-            for i, (key, label, image) in enumerate(row):
-                x = PAD + round(i * (each + GAP))
-                w = PAD + round((i + 1) * (each + GAP) - GAP) - x
-                self.category_tile(ui, key, label, image, x, round(y), w, round(h))
-                if key == self.tab:
-                    opened = (x, w)
-            y += h
-            panel = self.row_h[2 * r + 1]
-            if panel > GAP + 6:
-                bx, by, bw, bh = PAD, round(y + GAP), self.w - 2 * PAD, round(panel - GAP)
-                g.rect(bx, by, bw, bh, fill=WHITE, line=INK)
-                g.rect(bx + 1, by + 1, bw - 2, bh - 2, line=INK)
-                if opened:  # liga o quadrado escolhido à área aberta, como uma aba
-                    g.rect(opened[0], round(y) - 1, opened[1], GAP + 3, fill=INK)
-                if opened and not moving and bh > 40:
-                    key = self.tab
-                    area = (bx + 9, by + 9, bw - 18, bh - 18)
-                    {"convert": self.tab_convert, "compress": self.tab_compress, "edit": self.tab_edit,
-                     "download": self.tab_download}.get(key, lambda *a: self.tab_group(key, *a))(ui, area, kinds)
-            y += panel + (GAP if r < len(rows) - 1 else 0)
+        g.rect(0, 0, RAIL_W, self.h, fill=INK)
+        lx = (RAIL_W - 40) // 2
+        hover, held, clicked = ui.clickable(("menu", "Treco"), lx, 9, 40, 40)
+        open_ = self.menu == "Treco"
+        self.spots[("logo",)] = (lx, 9, 40, 40)
+        if hover and not open_:
+            self.want_tip("logo", (lx, 9, 40, 40), mascot.TIPS["logo"])
+        t = ui.ease(("logo",), 1.0 if hover or open_ else 0.0)
+        lift = 1 if t > .5 and not held else 0
+        g.rect(lx + 2 + lift, 11 + lift, 40, 40, fill=mix(INK, WHITE, t))
+        g.rect(lx - lift, 9 - lift, 40, 40, fill=BLUE)
+        g.center(lx - lift, 18 - lift, 40, "T", WHITE, True, 2.6)
+        if clicked:
+            self.menu = None if open_ else "Treco"
+            ui.later(ui.invalidate)
+        cats = list(CATEGORIES)
+        top, bottom = 60, self.h - 6
+        each = min(44, (bottom - top) / len(cats))
+        pinned = each >= 40 and (bottom - top) - each * len(cats) > 20  # sobra: Utilidades vai para o pé
+        for i, (key, label, image) in enumerate(cats):
+            y = round(top + i * each)
+            if pinned and key == "utils":
+                y = round(bottom - each)
+            self.rail_item(ui, key, RAIL_LABEL.get(key, label), image, y, round(each) - 3,
+                           key not in NEEDS_FILES or bool(kinds))
 
-    def category_tile(self, ui, key, label, image, x, y, w, h):
+    def rail_item(self, ui, key, label, image, y, h, ready):
         g = ui.g
+        x, w = 5, RAIL_W - 10
         selected = self.tab == key
         self.spots[("cat", key)] = (x, y, w, h)
         hover, held, clicked = ui.clickable(("cat", key), x, y, w, h)
-        ui.face(x, y, w, h, hover, held, selected)
-        color = ui.ink(hover, held, selected)
-        bold = True
-        if h >= 64:  # quadrado grande: ícone em cima, nome embaixo
-            size = 1.4 if w >= 110 else 1.15
-            icon = max(18, min(40, int(h * .3), w - 30))
-            lines = two_lines(label, w - 10, bold, size)
-            block = icon + 8 + len(lines) * int(11 * size)
-            iy = y + (h - block) // 2
-            g.icon(image, x + (w - icon) // 2, iy, icon, color)
-            for n, line in enumerate(lines):
-                g.center(x, iy + icon + 8 + n * int(11 * size), w, line, color, bold, size)
-        else:  # categoria aberta: quadrados baixos
-            g.icon(image, x + (w - 14) // 2, y + 4, 14, color)
-            g.center(x, y + h - 13, w, fit(label, int((w - 4) / .85), hover or selected), color, hover or selected, .85)
+        if hover:
+            self.want_tip(("cat", key), (x, y, w, h), LEADS.get(key, ""))
+        t = ui.ease(("rail", key), 1.0 if hover and not selected else 0.0)
+        if selected:
+            g.rect(x + 2, y + 2, w, h, fill=BLUE)
+            g.rect(x, y, w, h, fill=WHITE)
+            color = INK
+        else:
+            if t > 0:
+                g.rect(x, y, w, h, fill=mix(INK, BLUE, t))
+            color = mix(WHITE if ready else (120, 120, 120), WHITE, t)
+        if held:
+            g.rect(x, y, w, h, fill=BLUE)
+            color = WHITE
+        icon = 16 if h >= 34 else 13
+        top = y + (h - icon - (11 if h >= 30 else 0)) // 2
+        g.icon(image, x + (w - icon) // 2, top, icon, color)
+        if h >= 30:
+            g.center(x, top + icon + 4, w, fit(label.upper() if not english() else tr(label).upper(), int((w - 2) / .66), True),
+                     color, True, .66)
         if clicked:
-            self.tab = None if selected else key
+            if self.tab != key:
+                self.tab_at = time.monotonic()  # o conteúdo novo entra deslizando
+            self.tab = key
             ui.later(ui.invalidate)
+
+    # --- área principal: título grande, frase, etiquetas dos arquivos e o conteúdo do assunto
+    def draw_main(self, ui, kinds):
+        g = ui.g
+        x0 = RAIL_W + PAD
+        w = self.w - RAIL_W - 2 * PAD
+        key = self.tab
+        label = dict((k, l) for k, l, _ in CATEGORIES).get(key, "Solte aqui.")
+        size = 2.6 if w >= 220 else 2.1
+        tw = min(w, text_width(label, True, size))
+        g.rect(x0 - 2, TOP_H + 14, tw + 4, 10, fill=SKY)
+        g.text(x0, TOP_H + 2, fit(label, int(w / size), True), INK, True, size)
+        lead = LEADS.get(key, "Arraste arquivos para a janela ou clique em Adicionar.")
+        hovered = getattr(self, "chip_hover", None)
+        row = self.rows.get(hovered) if hovered else None
+        if row:  # passou o mouse numa etiqueta: mostra o que aconteceu com ela
+            detail = row.status if row.status and row.tone is False else row.sub
+            lead, lead_color = f"{row.name} · {detail}" if detail else row.name, BLUE if row.tone is not False else RED
+        else:
+            lead_color = DARK
+        g.text(x0, TOP_H + 32, fit(lead, int(w / .95)), lead_color, False, .95)
+        y = TOP_H + 48
+        if self.rows:
+            y = self.draw_files(ui, x0, y, w) + 8
+        age = time.monotonic() - getattr(self, "tab_at", 0)
+        if age < .18:  # entrada suave: sobe 10 px em 180 ms
+            slide = round(10 * (1 - age / .18) ** 2)
+            self.root.after(16, self.host.invalidate)
+        else:
+            slide = 0
+        area = (x0, y + slide, w, self.h - BAR_H - 10 - y - slide)
+        if self.drop_hot:
+            self.drop_zone(ui, area, True)
+            return
+        if key is None or (key in NEEDS_FILES and not kinds):
+            self.drop_zone(ui, area, False)
+            return
+        if area[3] < 30:
+            return
+        {"convert": self.tab_convert, "compress": self.tab_compress, "edit": self.tab_edit,
+         "download": self.tab_download}.get(key, lambda *a: self.tab_group(key, *a))(ui, area, kinds)
+
+    def drop_zone(self, ui, area, hot):
+        """Área grande para soltar arquivos (ou clicar e escolher)."""
+        g = ui.g
+        x, y, w, h = area
+        hover, held, clicked = ui.clickable("drop", x, y, w, h)
+        t = ui.ease(("drop",), 1.0 if hover or hot else 0.0)
+        if hot:
+            g.rect(x, y, w, h, fill=BLUE)
+        elif t > 0:
+            g.rect(x, y, w, h, fill=mix(CREAM, (232, 232, 255), t))
+        self.dashed(g, x, y, w, h, WHITE if hot else mix(INK, BLUE, t))
+        color = WHITE if hot else mix(INK, BLUE, t)
+        if mascot.enabled() and h >= 190 and self.tour is None:
+            size = min(96, h // 3)
+            pose = "comemorando" if hot else "oi" if t > .5 else "normal"
+            mascot.draw(g, pose, x + (w - mascot.width(pose, size, g.s)) // 2, y + h // 2 - size - 4, size)
+            ty = y + h // 2 + 6
+        else:
+            g.icon("plus", x + (w - 34) // 2, y + h // 2 - 34, 34, color)
+            ty = y + h // 2 + 6
+        g.center(x, ty, w, "Pode soltar." if hot else "Solte os arquivos aqui", color, True, 1.4)
+        g.center(x, ty + 18, w, "" if hot else "ou clique para escolher", WHITE if hot else DARK)
+        if clicked:
+            ui.later(self.pick_files)
+        if hot:
+            self.root.after(120, self.host.invalidate)
+
+    @staticmethod
+    def dashed(g, x, y, w, h, color, dash=4):
+        for dx in range(0, w, dash * 2):
+            g.rect(x + dx, y, min(dash, w - dx), 2, fill=color)
+            g.rect(x + dx, y + h - 2, min(dash, w - dx), 2, fill=color)
+        for dy in range(0, h, dash * 2):
+            g.rect(x, y + dy, 2, min(dash, h - dy), fill=color)
+            g.rect(x + w - 2, y + dy, 2, min(dash, h - dy), fill=color)
 
     def hint(self, ui, area, text):
         x, y, w, h = area
@@ -416,18 +489,21 @@ class App:
         if not shown:
             self.hint(ui, area, "Adicione um arquivo primeiro")
             return
-        for row, kind in enumerate(shown):
-            ry = y + row * 15
-            g.icon(KIND_ICON[kind], x, ry, 13, INK)
+        ry = y
+        for kind in shown:
+            g.icon(KIND_ICON[kind], x, ry + 1, 14, INK)
             names = OUTS[kind]
-            avail = w - 18 - (len(names) - 1) * 2
-            room = avail - sum(text_width(f) for f in names)
-            padding = max(3, min(10, room // len(names)))
-            cx = x + 18
+            avail = w - 22 - (len(names) - 1) * 4
+            room = avail - sum(text_width(f, True) for f in names)
+            padding = max(8, min(12, room // len(names)))
+            cx = x + 22
             for fmt in names:
-                width = text_width(fmt) + padding
-                ui.button(("fmt", kind, fmt), cx, ry, width, 14, fmt, on=lambda k=kind, f=fmt: self.convert_all(k, f))
-                cx += width + 2
+                width = text_width(fmt, True) + padding
+                if cx + width > x + w:  # não cabe: continua na linha de baixo
+                    cx, ry = x + 22, ry + 22
+                ui.button(("fmt", kind, fmt), cx, ry, width, 16, fmt, on=lambda k=kind, f=fmt: self.convert_all(k, f), bold=True)
+                cx += width + 4
+            ry += 26
         if "image" in kinds:
             sy = y + h - 11
             g.text(x, sy, "Qualidade", INK, True)
@@ -442,17 +518,18 @@ class App:
             self.hint(ui, area, "Serve para imagem, áudio, vídeo e PDF")
             return
         notes = {"leve": "quase igual", "medio": "equilibrado", "forte": "bem menor"}
-        each = (w - 8) // 3
+        each = (w - 16) // 3
         for i, (label, mode) in enumerate(COMPRESS_ITEMS[:3]):
-            bx = x + i * (each + 4)
+            bx = x + i * (each + 8)
             over, held, clicked = ui.clickable(("comp", mode), bx, y, each, 48)
-            ui.face(bx, y, each, 48, over, held)
+            ui.face(bx, y, each, 48, over, held, key=("comp", mode))
             color = ui.ink(over, held)
-            g.center(bx, y + 9, each, label, color, True, 1.5)
-            g.center(bx, y + 31, each, notes[mode], color if over or held else DARK)
+            shift = ui.shift
+            g.center(bx + shift, y + 9 + shift, each, label, color, True, 1.5)
+            g.center(bx + shift, y + 31 + shift, each, notes[mode], color if over or held else DARK)
             if clicked:
                 ui.later(self.compress_all, mode)
-        ry = y + 56
+        ry = y + 60
         g.text(x, ry + 5, "Até", INK, True)
         focused = ui.entry("target", x + 28, ry, 46, 20, self.target, numeric=True)
         if focused and any(k[0] == "Return" for k in ui.keys):
@@ -460,11 +537,13 @@ class App:
         g.text(x + 79, ry + 5, "MB", INK, True)
         ui.button("target-go", x + 104, ry, 92, 20, "Comprimir", on=self.compress_target, tone=BLUE, bold=True)
         presets = COMPRESS_ITEMS[3:]
-        cx = x + 202
-        width = (w - 202 - (len(presets) - 1) * 2) // len(presets)
+        py = ry + 32
+        g.text(x, py + 5, "Para mandar em app:", DARK)
+        left = x + text_width("Para mandar em app:") + 10
+        width = (w - (left - x) - (len(presets) - 1) * 6) // len(presets)
         for label, value in presets:
-            ui.button(("preset", value), cx, ry, width, 20, label.replace(" MB", ""), on=lambda v=value: self.compress_all(v))
-            cx += width + 2
+            ui.button(("preset", value), left, py, width, 20, label, on=lambda v=value: self.compress_all(v), bold=True)
+            left += width + 6
 
     def tab_edit(self, ui, area, kinds):
         self.tool_grid(ui, area, kinds, TOOLS)
@@ -515,40 +594,51 @@ class App:
         return op == "awake" and bool(self.awake and self.awake.on)
 
     def tool_grid(self, ui, area, kinds, tools, columns=None):
+        """Ações em cartões: ícone, nome e uma frase do que faz. Rola com a rodinha se não couber."""
         g = ui.g
         x, y, w, h = area
-        if columns:
-            rows = -(-len(tools) // columns)
-        else:
-            columns, rows = grid_shape(len(tools), w, h)
-        each = (w - (columns - 1) * 2) // columns
-        cell_h = min(76, (h - 2 * (rows - 1)) // rows)
-        y += (h - rows * cell_h - 2 * (rows - 1)) // 2  # sobra de altura: centraliza
+        gap = 7
+        columns = columns or (3 if w >= 430 else 2)
+        rows = -(-len(tools) // columns)
+        card_h = max(36, min(52, (h - gap * (rows - 1)) // rows))
+        visible = max(1, (h + gap) // (card_h + gap))
+        scroll_key = ("cards", self.tab)
+        offset = getattr(self, "card_scroll", {}).get(scroll_key, 0)
+        if rows > visible:
+            if ui.wheel and ui.over(x, y, w, h):
+                offset += ui.wheel
+            offset = ui.scrollbar(("cards", self.tab), x + w - 11, y, visible * (card_h + gap) - gap, rows, visible, offset)
+            w -= 16
+        offset = max(0, min(max(0, rows - visible), offset))
+        self.card_scroll = {**getattr(self, "card_scroll", {}), scroll_key: offset}
+        each = (w - gap * (columns - 1)) // columns
         for i, (op, label, image, accepted) in enumerate(tools):
-            bx, by = x + (i % columns) * (each + 2), y + (i // columns) * (cell_h + 2)
+            r = i // columns - offset
+            if not 0 <= r < visible:
+                continue
+            bx, by = x + (i % columns) * (each + gap), y + r * (card_h + gap)
             active = accepted is None or bool(kinds & accepted)
             selected = self.selected_tool(op)
-            self.spots[("tool", op)] = (bx, by, each, cell_h)
-            over, held, clicked = ui.clickable(("tool", op), bx, by, each, cell_h, active)
-            ui.face(bx, by, each, cell_h, over, held, selected, enabled=active)
+            self.spots[("tool", op)] = (bx, by, each, card_h)
+            over, held, clicked = ui.clickable(("tool", op), bx, by, each, card_h, active)
+            ui.face(bx, by, each, card_h, over, held, selected, enabled=active, key=("tool", op))
             color = ui.ink(over, held, selected, enabled=active)
-            if cell_h >= 56:  # botão grande: ícone no meio e nome em até duas linhas
-                lines = two_lines(label, each - 6, over, .9)
-                icon = 22 if cell_h >= 64 else 18
-                block = icon + 6 + len(lines) * 10
-                top = by + (cell_h - block) // 2
-                g.icon(image, bx + (each - icon) // 2, top, icon, color)
-                for n, line in enumerate(lines):
-                    g.center(bx, top + icon + 6 + n * 10, each, line, color, over, .9)
-            elif cell_h >= 40:
-                g.icon(image, bx + (each - 18) // 2, by + 6, 18, color)
-                g.center(bx, by + cell_h - 14, each, fit(label, int((each - 4) / .8), over), color, over, .8)
-            else:  # botão baixo: ícone ao lado do nome
-                g.icon(image, bx + 6, by + (cell_h - 14) // 2, 14, color)
-                g.text(bx + 24, by + (cell_h - 8) // 2, fit(label, int((each - 28) / .85), over), color, over, .85)
+            shift = ui.shift
+            cx, cy = bx + shift, by + shift
+            icon = 20 if card_h >= 44 else 16
+            g.icon(image, cx + 9, cy + (card_h - icon) // 2, icon, color)
+            tx = cx + icon + 17
+            room = each - icon - 24
+            desc = TIPS.get(op) or DESC.get(op, "")
+            dim = GRAY if not active else WHITE if (held or selected) else mix(DARK, (225, 225, 255), ui.mix)
+            if desc and card_h >= 34:
+                g.text(tx, cy + card_h // 2 - 11, fit(label, int(room / 1.05), True), color, True, 1.05)
+                g.text(tx, cy + card_h // 2 + 2, fit(desc, int(room / .82)), dim, False, .82)
+            else:
+                g.text(tx, cy + (card_h - 10) // 2, fit(label, int(room / 1.05), True), color, True, 1.05)
             if clicked:
                 ui.later(self.tool, op)
-            if ui.context and ui.over(bx, by, each, cell_h):
+            if ui.context and ui.over(bx, by, each, card_h):
                 ui.later(self.open_context, op, ui.mx, ui.my)
 
     def tab_download(self, ui, area, kinds):
@@ -570,87 +660,131 @@ class App:
         ui.button("dl-go", x, top, w, min(44, h - 54), label, on=self.start_download, enabled=bool(self.url.text.strip()),
                   tone=BLUE, bold=True, size=1.7)
 
-    # --- lista de arquivos
-    def draw_files(self, ui):
+    # --- arquivos: etiquetas com o tipo, o nome e um x para tirar da lista
+    def chip_size(self, row):
+        ext = (os.path.splitext(row.name)[1][1:] or row.kind).upper()[:4]
+        name = os.path.splitext(row.name)[0]
+        return ext, name, text_width(ext, True, .8) + 6
+
+    def draw_files(self, ui, x0, y, w):
+        """Desenha as etiquetas em linhas (até 2 ou 3; a rodinha rola). Devolve onde terminam."""
         g = ui.g
-        y, h = HEADER_H, self.files_h - 2
         rows = list(self.rows.values())
-        count = len(rows)
-        if not rows or self.drop_hot:
-            hover, held, clicked = ui.clickable("drop", 0, y, self.w, h)
-            hot = self.drop_hot
-            if hot:
-                g.rect(0, y, self.w, h, fill=BLUE)
-            color = WHITE if hot else BLUE if hover else INK
-            g.icon("plus", 12, y + 26, 44, color)
-            g.text(68, y + 22, "Solte aqui." if not hot else "Pode soltar.", color, hover or hot, 3.0)
-            g.text(70, y + 66, "ou clique para escolher", WHITE if hot else color if hover else DARK)
-            if clicked:
-                ui.later(self.pick_files)
-            if hot:
-                self.root.after(120, self.host.invalidate)
-        if rows and not self.drop_hot:
-            lx, ly, lw, lh = 0, y, self.w - 12, h
-            visible = max(1, lh // ROW_H)
-            if ui.wheel and ui.over(0, ly, self.w, lh):
-                self.scroll += ui.wheel
-            self.scroll = ui.scrollbar("list", self.w - 12, ly, lh, max(count, 1), visible, self.scroll)
-            self.scroll = max(0, min(max(0, count - visible), self.scroll))
-            phase = int(time.monotonic() * 10)
-            for i, row in enumerate(rows[self.scroll:self.scroll + visible]):
-                ry = ly + i * ROW_H
-                over = ui.over(lx, ry, lw, ROW_H)
-                tone = BLUE if over else INK
-                g.icon(KIND_ICON[row.kind], lx + 10, ry + 4, 15, tone)
-                status_w = 80
-                g.text(lx + 31, ry + 1, fit(row.name, lw - 31 - status_w - 26, True), tone, True)
-                g.text(lx + 31, ry + 12, fit(row.sub, lw - 31 - status_w - 26 if row.busy else lw - 60), tone if over else DARK, False, .9)
-                bx = lx + lw - status_w - 20
-                if row.busy:
-                    if row.progress is None:
-                        g.barber(bx, ry + 7, status_w, 9, phase, BLUE)
-                    else:
-                        g.blocks(bx, ry + 7, status_w, 9, row.progress, BLUE)
-                elif row.status:
-                    color = BLUE if row.tone is True else RED if row.tone is False else DARK
-                    g.right(lx + lw - 23, ry + 6, fit(row.status, status_w, True), color, True)
-                mark = lambda mx, my, color: ui.mark_x(mx + 1, my + 1, 9, color)
-                if ui.mini(("row-close", row.path), lx + lw - 19, ry + 5, 13, mark):
-                    ui.later(self.close_row, row.path)
-                g.hline(lx, ry + ROW_H - 1, lw, INK)
-                self.spots[("row", row.path)] = (lx, ry, lw - 22, ROW_H)
-                if over and ui.mx < lx + lw - 22:
-                    if ui.double:  # duplo clique: mostra o pronto (ou o original) no Finder
-                        ui.later(self.show_row, row.path)
-                    elif ui.context:
-                        ui.later(self.open_row_menu, row.path, ui.mx, ui.my)
-        g.hline(0, HEADER_H + self.files_h - 2, self.w, INK)
-        g.hline(0, HEADER_H + self.files_h - 1, self.w, INK)
+        lines, line, used = [], [], 0
+        for row in rows:
+            ext, name, tag_w = self.chip_size(row)
+            label = name + (" ✓" if row.tone is True else "")
+            chip_w = min(w, tag_w + 10 + min(text_width(label, True, .9), 150) + 22)
+            if line and used + chip_w > w:
+                lines.append(line)
+                line, used = [], 0
+            line.append((row, chip_w))
+            used += chip_w + 6
+        if line:
+            lines.append(line)
+        most = 3 if self.h >= 520 else 2
+        area_h = min(len(lines), most) * (CHIP_H + 5)
+        if ui.wheel and ui.over(x0, y, w, area_h):
+            self.scroll += ui.wheel
+        self.scroll = max(0, min(max(0, len(lines) - most), self.scroll))
+        self.chip_hover = None
+        phase = int(time.monotonic() * 10)
+        for n, line in enumerate(lines[self.scroll:self.scroll + most]):
+            cy = y + n * (CHIP_H + 5)
+            cx = x0
+            last = n == most - 1 and self.scroll + most < len(lines)
+            for row, chip_w in line:
+                self.chip(ui, row, cx, cy, chip_w, phase)
+                cx += chip_w + 6
+            if last:  # tem mais linhas embaixo: um aviso no fim
+                more = sum(len(l) for l in lines[self.scroll + most:])
+                g.right(x0 + w, cy + 4, f"+{more} ↓", BLUE, True)
+        return y + area_h
+
+    def chip(self, ui, row, x, y, w, phase):
+        g = ui.g
+        ext, name, tag_w = self.chip_size(row)
+        over = ui.over(x, y, w, CHIP_H)
+        t = ui.ease(("chip", row.path), 1.0 if over else 0.0)
+        if over:
+            self.chip_hover = row.path
+        g.rect(x + 1, y + 1, w, CHIP_H, fill=INK)
+        g.rect(x, y, w, CHIP_H, fill=mix(WHITE, (232, 232, 255), t), line=INK)
+        if row.busy:  # progresso: um filete azul no pé da etiqueta
+            inner = w - 2
+            if row.progress is None:  # sem porcentagem: um pedaço indo e voltando
+                part = max(12, inner // 4)
+                span = max(1, inner - part)
+                pos = abs((phase * 3) % (span * 2) - span)
+                g.rect(x + 1 + pos, y + CHIP_H - 3, part, 2, fill=BLUE)
+                self.root.after(60, self.host.invalidate)
+            else:
+                g.rect(x + 1, y + CHIP_H - 3, max(1, int(inner * row.progress)), 2, fill=BLUE)
+        tag = BLUE if row.tone is True else RED if row.tone is False else INK
+        g.rect(x + 3, y + 3, tag_w, CHIP_H - 7, fill=tag)
+        g.text(x + 6, y + 4, ext, WHITE, True, .8)
+        nx = x + tag_w + 8
+        label = name + (" ✓" if row.tone is True else "")
+        g.text(nx, y + 4, fit(label, int((w - tag_w - 30) / .9), True), mix(INK, BLUE, t), True, .9)
+        mark = lambda mx, my, color: ui.mark_x(mx + 1, my + 1, 8, color)
+        if ui.mini(("row-close", row.path), x + w - 15, y + 3, 11, mark):
+            ui.later(self.close_row, row.path)
+        self.spots[("row", row.path)] = (x, y, w - 16, CHIP_H)
+        if over and ui.mx < x + w - 16:
+            if ui.double:  # duplo clique: mostra o pronto (ou o original) no Finder
+                ui.later(self.show_row, row.path)
+            elif ui.context:
+                ui.later(self.open_row_menu, row.path, ui.mx, ui.my)
 
     def draw_footer(self, ui):
+        """Barra de baixo: área tracejada para adicionar e os botões Abrir, Salvar em e Limpar."""
         g = ui.g
-        y = self.h - FOOTER_H
+        y = self.h - BAR_H
+        x0 = RAIL_W
+        g.rect(x0, y, self.w - x0, BAR_H, fill=WHITE)
+        g.hline(x0, y, self.w - x0, INK)
+        g.hline(x0, y + 1, self.w - x0, INK)
         dest = "Salvar em" if not self.out_dir else os.path.basename(self.out_dir)
-        items = (("add", "plus", "Adicionar", self.pick_files), ("open", "folder", "Abrir", self.open_folder),
-                 ("dest", "disk", dest, self.choose_dest), ("clear", "trash", "Clear" if english() else "Limpar", self.clear))
-        g.hline(0, y, self.w, INK)
-        g.hline(0, y + 1, self.w, INK)
-        each = self.w // len(items)
-        for i, (key, name, label, action) in enumerate(items):
-            x = i * each
-            over, held, clicked = ui.clickable(("desk", key), x, y + 2, each, FOOTER_H - 2)
-            if held:
-                g.rect(x, y + 2, each, FOOTER_H - 2, fill=INK)
-            color = WHITE if held else BLUE if over else INK
-            text = fit(label, each - 26, over)
-            width = 15 + text_width(text, over)
-            left = x + (each - width) // 2
-            g.icon(name, left, y + (FOOTER_H - 11) // 2, 12, color)
-            g.text(left + 15, y + (FOOTER_H - 9) // 2, text, color, over)
-            if i:
-                g.vline(x, y + 2, FOOTER_H - 2, INK)
+        buttons = [("open", "folder", "Abrir", self.open_folder), ("dest", "disk", dest, self.choose_dest),
+                   ("clear", "trash", "Clear" if english() else "Limpar", self.clear)]
+        bx = self.w - PAD
+        by, bh = y + 9, 18
+        for key, image, label, action in reversed(buttons):
+            text = fit(label, 70, True)
+            bw = text_width(text, True, .9) + 30 if key == "dest" else 22 if key == "clear" else text_width(text, True, .9) + 30
+            if self.w - RAIL_W < 330 and key == "open":
+                bw = 22
+            bx -= bw
+            over, held, clicked = ui.clickable(("desk", key), bx, by, bw, bh)
+            self.spots[("desk", key)] = (bx, by, bw, bh)
+            if over:
+                self.want_tip(key, (bx, by, bw, bh), mascot.TIPS[key])
+            ui.face(bx, by, bw, bh, over, held, tone=key == "dest", key=("desk", key))
+            color = ui.ink(over, held, tone=key == "dest")
+            shift = ui.shift
+            if bw == 22:
+                g.icon(image, bx + 5 + shift, by + 4 + shift, 11, color)
+            else:
+                g.icon(image, bx + 8 + shift, by + 4 + shift, 11, color)
+                g.text(bx + 23 + shift, by + 5 + shift, text, color, True, .9)
             if clicked:
                 ui.later(action)
+            bx -= 8
+        ax, aw = x0 + PAD, bx - x0 - PAD - 2
+        over, held, clicked = ui.clickable(("desk", "add"), ax, by - 1, aw, bh + 2)
+        self.spots[("desk", "add")] = (ax, by - 1, aw, bh + 2)
+        if over:
+            self.want_tip("add", (ax, by - 1, aw, bh + 2), mascot.TIPS["add"])
+        t = ui.ease(("add",), 1.0 if over or self.drop_hot else 0.0)
+        if t > 0:
+            g.rect(ax, by - 1, aw, bh + 2, fill=mix(WHITE, BLUE, t))
+        color = mix(INK, WHITE, t)
+        self.dashed(g, ax, by - 1, aw, bh + 2, INK if t < .5 else BLUE)
+        text = fit("Adicionar arquivos" if aw > 150 else "Adicionar", int((aw - 30) / .9), True)
+        g.icon("plus", ax + 8, by + 4, 11, color)
+        g.text(ax + 23, by + 5, text.upper(), color, True, .9)
+        if clicked:
+            ui.later(self.pick_files)
 
     def draw_about(self, ui):
         g = ui.g
@@ -662,6 +796,137 @@ class App:
         g.text(x + 14, y + 76, "O faz-tudo de arquivos.", INK, True)
         g.text(x + 14, y + 91, f"Versão {VERSION}", DARK)
         ui.button("about-ok", x + w - 74, y + h - 32, 60, 20, "OK", on=self.hide_about, tone=BLUE, bold=True)
+        if mascot.enabled():
+            mascot.draw(g, "oi", x + w - 96, y + 26, 70)
+
+    # --- Disquetinho: tour da primeira vez e balões de dica
+    def toggle_mascot(self):
+        mascot.toggle()
+        self.host.invalidate()
+
+    def maybe_tour(self):
+        if mascot.tour_pending() and self.tour is None:
+            self.start_tour()
+
+    def start_tour(self):
+        self.menu = self.context_menu = None
+        self.about = False
+        self.tour = 0
+        self.host.invalidate()
+
+    def tour_step(self, delta):
+        step = self.tour + delta
+        if step >= len(mascot.TOUR) or step < 0:
+            self.end_tour()
+        else:
+            self.tour = step
+            self.host.invalidate()
+
+    def end_tour(self):
+        self.tour = None
+        mascot.tour_done()
+        self.host.invalidate()
+
+    def tour_target(self, name):
+        if name == "rail":
+            return (0, 56, RAIL_W, self.h - 56)
+        if name == "main":
+            return (RAIL_W + 6, TOP_H + 4, self.w - RAIL_W - 12, self.h - TOP_H - BAR_H - 8)
+        if name == "logo":
+            x, y, w, h = self.spots.get(("logo",), (13, 9, 40, 40))
+            return (x - 4, y - 4, w + 8, h + 8)
+        spot = self.spots.get(("desk", name))
+        if spot:
+            x, y, w, h = spot
+            return (x - 4, y - 4, w + 8, h + 8)
+        return None
+
+    def draw_tour(self, ui):
+        from PIL import Image, ImageDraw
+        g = ui.g
+        pose, target, title, text = mascot.TOUR[self.tour]
+        box = self.tour_target(target) if target else None
+        # escurece tudo, menos o que o passo mostra
+        s = g.s
+        shade = Image.new("L", (self.w * s, self.h * s), 120)
+        if box:
+            bx, by, bw, bh = box
+            ImageDraw.Draw(shade).rectangle((bx * s, by * s, (bx + bw) * s - 1, (by + bh) * s - 1), fill=0)
+        g.im.paste(INK, (0, 0), shade)
+        if box:
+            bx, by, bw, bh = box
+            for i in range(2):
+                g.rect(bx - i, by - i, bw + 2 * i, bh + 2 * i, line=BLUE)
+        show = mascot.enabled()
+        size = 84 if self.h >= 470 else 66
+        mw = mascot.width(pose, size, s) if show else 0
+        w = max(170, min(240, self.w - RAIL_W - mw - 40))
+        bh_ = mascot.balloon_height(w, title, text) + 30
+        # onde fica o balão: perto do alvo, sem cobrir
+        if target == "rail":
+            x, y = RAIL_W + 14, max(60, self.h // 2 - bh_ // 2)
+        elif target == "logo":
+            x, y = RAIL_W + 14, 40
+        elif target in ("add", "dest", "open", "clear"):
+            x, y = RAIL_W + 14, self.h - BAR_H - bh_ - 16
+            if target == "dest":  # o balão fica à esquerda e o Disquetinho logo acima do botão
+                x = max(RAIL_W + 8, self.w - PAD - mw - w - 12)
+        else:
+            x, y = (self.w - w - mw - 8 + RAIL_W) // 2, (self.h - bh_) // 2
+        x = max(4, min(x, self.w - w - mw - 10))
+        mx = x + w + 8
+        used = mascot.balloon(g, x, y, w, title, text)
+        g.rect(x, y + used, w, 30, fill=WHITE)
+        g.vline(x, y + used, 30, INK)
+        g.vline(x + w - 1, y + used, 30, INK)
+        g.hline(x, y + used + 29, w, INK)
+        g.rect(x + 3, y + used + 30, w, 3, fill=INK)
+        g.rect(x + w, y + used, 3, 30, fill=INK)
+        last = self.tour == len(mascot.TOUR) - 1
+        by = y + used + 5
+        g.text(x + 10, by + 5, f"{self.tour + 1}/{len(mascot.TOUR)}", DARK)
+        nxt = "Começar" if last else "Próximo"
+        nw = text_width(nxt, True, .9) + 20
+        ui.button("tour-next", x + w - nw - 8, by, nw, 18, nxt, on=lambda: self.tour_step(1), tone=BLUE, bold=True)
+        if not last:
+            sw = text_width("Pular o tour", True, .9) + 16
+            ui.button("tour-skip", x + w - nw - sw - 14, by, sw, 18, "Pular o tour", on=self.end_tour)
+        if show:
+            mascot.draw(g, pose, mx, y + used + 30 - size + 6, size)
+
+    def want_tip(self, key, area, text):
+        if text and self.tour is None and self.menu is None and self.context_menu is None and not self.about:
+            self.tip = (key, area, text)
+
+    def draw_tip(self, ui):
+        tip = self.tip
+        if tip is None:
+            self.tip_key = None
+            return
+        key, (x, y, w, h), text = tip
+        now = time.monotonic()
+        if key != self.tip_key:
+            self.tip_key, self.tip_since = key, now
+            self.root.after(int(mascot.TIP_DELAY * 1000) + 30, self.host.invalidate)
+            return
+        if now - self.tip_since < mascot.TIP_DELAY:
+            return
+        g = ui.g
+        face = 30 if mascot.enabled() else 0
+        tw = min(200, max(120, text_width(tr(text)) + 20))
+        bw = tw + face
+        bh = max(mascot.balloon_height(tw, None, text), face + 8)
+        tx = x + w + 8 if x < RAIL_W else min(x, self.w - bw - 8)
+        ty = y + (h - bh) // 2 if x < RAIL_W else y - bh - 8
+        ty = max(4, min(ty, self.h - bh - 6))
+        g.rect(tx + 3, ty + 3, bw, bh, fill=INK)
+        g.rect(tx, ty, bw, bh, fill=WHITE, line=INK)
+        if face:
+            mascot.draw(g, "rosto", tx + 5, ty + (bh - 26) // 2, 26)
+        ly = ty + (bh - len(mascot.wrap(text, tw - 20)) * 12) // 2 + 1
+        for line in mascot.wrap(text, tw - 20):
+            g.text(tx + face + 8, ly, line, DARK)
+            ly += 12
 
     def show_about(self):
         self.about = True
@@ -928,8 +1193,7 @@ class App:
                               "unblock": ud.unblock_app}[op])
 
     def list_height(self):
-        """A lista de arquivos ganha um terço da altura extra; o resto vai para os botões."""
-        return FILES_H + max(0, self.h - H) // 3
+        return 0  # a lista virou etiquetas dentro da área principal
 
     def resized(self, width, height):
         from ..core import prefs

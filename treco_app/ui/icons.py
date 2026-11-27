@@ -1,3 +1,4 @@
+import os
 """Ícones do Treco, desenhados pixel a pixel."""
 from PIL import Image, ImageDraw
 
@@ -580,18 +581,56 @@ def _rounded_mask(size, radius=.225):
     return big.resize((size, size), Image.LANCZOS)
 
 
+MASCOTE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mascote")
+
+
+def mascote(pose):
+    """Uma pose do Disquetinho, o mascote (RGBA, fundo transparente)."""
+    return Image.open(os.path.join(MASCOTE_DIR, pose + ".png")).convert("RGBA")
+
+
+def _label_box(face):
+    """Acha a etiqueta branca no pé do rosto do Disquetinho, para escrever o T nela."""
+    w, h = face.size
+    px = face.load()
+    col = w // 2
+    rows = [y for y in range(int(h * .7), h) if px[col, y][3] > 200 and min(px[col, y][:3]) > 200]
+    if not rows:
+        return None
+    top, bottom = rows[0], rows[-1]
+    mid = (top + bottom) // 2
+    cols = [x for x in range(w) if px[x, mid][3] > 200 and min(px[x, mid][:3]) > 200]
+    return min(cols), top, max(cols), bottom
+
+
 def app_icon(size=1024):
-    """Ícone do Dock e do Finder, na grade padrão do macOS (corpo de 824 em 1024)."""
+    """Ícone do Dock e do Finder, na grade padrão do macOS (corpo de 824 em 1024): quadrado
+    creme de contorno grosso e sombra dura, com o rosto do Disquetinho, como o do Pauta."""
     canvas, body, margin = 1024, 824, 100
-    tile = Image.new("RGBA", (body, body), (0, 0, 255, 255))
-    draw = ImageDraw.Draw(tile)
-    font = _letter_font(640)
-    left, top, right, bottom = draw.textbbox((0, 0), "T", font=font)
-    x, y = (body - (right - left)) // 2 - left - 19, (body - (bottom - top)) // 2 - top - 19
-    draw.text((x + 38, y + 38), "T", font=font, fill=(0, 0, 0))
-    draw.text((x, y), "T", font=font, fill=(255, 255, 255))
+    line, shadow = 24, 34
     img = Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))
-    img.paste(tile, (margin, margin), _rounded_mask(body))
+    outer = body - shadow
+    mask = _rounded_mask(outer)
+    img.paste((10, 10, 10, 255), (margin + shadow, margin + shadow), mask)
+    img.paste((10, 10, 10, 255), (margin, margin), mask)
+    inner = outer - line * 2
+    img.paste((253, 249, 238, 255), (margin + line, margin + line), _rounded_mask(inner, .2))
+    face = mascote("rosto")
+    box = _label_box(face)
+    if box:
+        draw = ImageDraw.Draw(face)
+        x0, y0, x1, y1 = box
+        pixels = (y1 - y0) * 2
+        while True:  # o maior T que cabe com folga na etiqueta
+            font = _letter_font(pixels)
+            left, top, right, bottom = draw.textbbox((0, 0), "T", font=font)
+            if bottom - top <= (y1 - y0) * .78 or pixels < 8:
+                break
+            pixels -= 2
+        draw.text(((x0 + x1) // 2 - (left + right) // 2, (y0 + y1) // 2 - (top + bottom) // 2), "T", font=font, fill=(10, 10, 10))
+    k = inner * .84 / max(face.size)
+    face = face.resize((round(face.width * k), round(face.height * k)), Image.LANCZOS)
+    img.alpha_composite(face, (margin + (outer - face.width) // 2, margin + (outer - face.height) // 2))
     return img if size == canvas else img.resize((size, size), Image.LANCZOS)
 
 

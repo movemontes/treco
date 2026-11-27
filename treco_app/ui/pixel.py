@@ -27,9 +27,20 @@ RED = (225, 0, 0)
 GREEN = BLUE
 BONE = WHITE
 BONE_DIM = GRAY
+CREAM = (253, 249, 238)  # fundo das janelas
+SKY = (190, 190, 255)  # marca-texto azul clarinho embaixo dos títulos
 LCD = WHITE
 LCD_HI = (226, 226, 255)
 LCD_LINE = INK
+
+def mix(a, b, t):
+    """Cor no meio do caminho entre a e b (t de 0 a 1)."""
+    if t <= 0:
+        return a
+    if t >= 1:
+        return b
+    return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+
 
 _GLYPHS = (
     "0000000000 00005F0000 0007000700 147F147F14 242A7F2A12 2313086462 3649562050 0008070300 "
@@ -139,53 +150,93 @@ def bitmap_fit(text, width, bold=False):
     return text + "…"
 
 
-# --- fonte: Archivo Expanded, que vai dentro do app (licença livre, ver fonts/OFL.txt)
+# --- fonte: Archivo, que vai dentro do app (licença livre, ver fonts/OFL.txt).
+# Títulos grandes usam a versão larga; o resto usa a estreita, que ocupa menos espaço.
 FONT_SIZE = 9
 BASELINE = 9
 SYMBOLS = "→←✓"  # desenhados à mão, porque nem toda fonte tem
 FONT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "Archivo-Variable.ttf")
-WEIGHT, WEIGHT_BOLD, WIDTH_AXIS = 500, 800, 125
+WEIGHT, WEIGHT_BOLD, WIDTH_WIDE, WIDTH_NARROW = 500, 800, 125, 100
+WIDE_SCALE = 1.8  # a partir deste tamanho o texto é título
+
+
+def _wide(scale):
+    return scale >= WIDE_SCALE
 
 
 @lru_cache(maxsize=64)
-def _font(bold, pixels):
+def _font(bold, pixels, wide=False):
     try:
+        if not wide and SMALL_FONT:
+            return _small_font(bold, pixels)
         font = ImageFont.truetype(FONT_FILE, pixels)
-        font.set_variation_by_axes([WEIGHT_BOLD if bold else WEIGHT, WIDTH_AXIS])
+        font.set_variation_by_axes([WEIGHT_BOLD if bold else WEIGHT, WIDTH_WIDE if wide else WIDTH_NARROW])
         return font
     except OSError:
         return None
 
 
+# Texto pequeno: Clash Grotesk. A licença dela (ITF FFL) deixa ir dentro do app, mas não
+# em repositório público, então o arquivo fica fora do Git. Sem ela, usa a Archivo normal.
+SMALL_FILES = [os.path.join(os.path.dirname(FONT_FILE), name)
+               for name in ("ClashGrotesk-Medium.otf", "ClashGrotesk-Semibold.otf")]
+SMALL_FONT = all(os.path.exists(path) for path in SMALL_FILES)
+FALLBACK = "°"  # a Clash desenha o grau pequeno demais; esse vem da Archivo
+
+
+def _small_font(bold, pixels):
+    return ImageFont.truetype(SMALL_FILES[1 if bold else 0], pixels)
+
+
+@lru_cache(maxsize=64)
+def _plain_font(bold, pixels):
+    """Archivo de largura normal: usada nos símbolos que a fonte pequena não tem bons."""
+    font = ImageFont.truetype(FONT_FILE, pixels)
+    font.set_variation_by_axes([WEIGHT_BOLD if bold else WEIGHT, 100])
+    return font
+
+
 def _runs(text):
-    """Separa o texto comum dos símbolos desenhados à mão."""
+    """Separa o texto comum dos símbolos desenhados à mão ("symbol") e dos que vêm
+    de outra fonte ("fallback")."""
     current = ""
     for char in text:
-        if char in SYMBOLS:
+        kind = "symbol" if char in SYMBOLS else "fallback" if char in FALLBACK else None
+        if kind:
             if current:
-                yield current, False
+                yield current, "text"
                 current = ""
-            yield char, True
+            yield char, kind
         else:
             current += char
     if current:
-        yield current, False
+        yield current, "text"
+
+
+def _run_font(font, kind, bold, pixels, wide):
+    """A fonte de cada trecho: a pequena empresta alguns símbolos da Archivo."""
+    if kind == "fallback" and SMALL_FONT and not wide:
+        return _plain_font(bold, pixels)
+    return font
 
 
 @lru_cache(maxsize=4096)
-def _measure(text, bold):
-    font = _font(bold, FONT_SIZE * 4)
+def _measure(text, bold, wide=False):
+    font = _font(bold, FONT_SIZE * 4, wide)
     if font is None:
         return float(bitmap_width(text, bold))
     total = 0.0
-    for run, symbol in _runs(text):
-        total += bitmap_width(run, True) + 1 if symbol else font.getlength(run) / 4
+    for run, kind in _runs(text):
+        if kind == "symbol":
+            total += bitmap_width(run, True) + 1
+        else:
+            total += _run_font(font, kind, bold, FONT_SIZE * 4, wide).getlength(run) / 4
     return total
 
 
 def text_width(text, bold=False, scale=1):
     text = tr(text)
-    return math.ceil(_measure(text, bold) * scale)
+    return math.ceil(_measure(text, bold, _wide(scale)) * scale)
 
 
 def fit(text, width, bold=False):
@@ -199,25 +250,33 @@ def fit(text, width, bold=False):
 
 
 @lru_cache(maxsize=2048)
-def _label(text, bold, pixels):
+def _label(text, bold, pixels, wide=False):
     """Máscara suave do texto. Devolve a máscara, a folga à esquerda e a linha de base."""
-    font = _font(bold, pixels)
+    if pixels < FONT_SIZE * 4:
+        # Em tamanho pequeno a fonte se alarga sozinha e passa da medida; por isso
+        # desenha grande e reduz, mantendo a mesma largura que o layout calculou.
+        k = math.ceil(FONT_SIZE * 4 / pixels)
+        big, pad, base = _label(text, bold, pixels * k, wide)
+        size = (math.ceil(big.width / k), math.ceil(big.height / k))
+        return big.resize(size, Image.Resampling.LANCZOS), round(pad / k), round(base / k)
+    font = _font(bold, pixels, wide)
     pad = max(2, pixels // 6)
     base = round(pixels * 1.15)
-    width = math.ceil(_measure(text, bold) * pixels / FONT_SIZE) + pad * 2 + 2
+    width = math.ceil(max(_measure(text, bold, wide) * pixels / FONT_SIZE, font.getlength(text) + pixels)) + pad * 2 + 2
     mask = Image.new("L", (width, base + round(pixels * .45)), 0)
     draw = ImageDraw.Draw(mask)
     x = pad
     factor = max(1, round(pixels / FONT_SIZE))
-    for run, symbol in _runs(text):
-        if symbol:
+    for run, kind in _runs(text):
+        if kind == "symbol":
             shape, advance = _glyph(run, True)
             big = shape.resize((shape.width * factor, shape.height * factor), Image.Resampling.NEAREST)
             mask.paste(255, (int(x), base - 9 * factor), big)
             x += advance * factor
         else:
-            draw.text((x, base), run, fill=255, font=font, anchor="ls")
-            x += font.getlength(run)
+            face = _run_font(font, kind, bold, pixels, wide)
+            draw.text((x, base), run, fill=255, font=face, anchor="ls")
+            x += face.getlength(run)
     return mask, pad, base
 
 
@@ -284,7 +343,7 @@ class Gfx:
         pixels = max(6, round(FONT_SIZE * scale * self.s))
         if self.s > 1 and _font(bold, pixels) is not None:
             if text:
-                mask, pad, base = _label(text, bold, pixels)
+                mask, pad, base = _label(text, bold, pixels, _wide(scale))
                 self.im.paste(color, (x * self.s - pad, y * self.s + round(BASELINE * scale * self.s) - base), mask)
             return x + text_width(text, bold, scale) + 1
         factor = max(1, int(scale)) * self.s

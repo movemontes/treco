@@ -165,7 +165,8 @@ def main():
         root.after(120, show)
     if "--bandeja" not in sys.argv:
         from .welcome import show_once
-        root.after(900, lambda: show_once(app))  # recado de boas-vindas, só na primeira vez
+        # recado de boas-vindas e depois o tour do Disquetinho, só na primeira vez
+        root.after(900, lambda: show_once(app, then=app.maybe_tour))
     from .update_ui import check_later
     check_later(app)  # versão nova no GitHub? confere uma vez por dia
     root.mainloop()

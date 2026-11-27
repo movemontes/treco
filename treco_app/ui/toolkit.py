@@ -4,7 +4,9 @@ import tkinter as tk
 
 from PIL import ImageTk
 
-from .pixel import BLUE, DARK, GRAY, INK, LINE, WHITE, Gfx, fit, text_width
+import time
+
+from .pixel import BLUE, CREAM, DARK, GRAY, INK, LINE, WHITE, Gfx, fit, mix, text_width
 from ..core.paths import MAC
 
 if MAC:
@@ -94,6 +96,9 @@ class PixelHost:
         self.tick_count = 0
         self.alive = True
         self.after_frame = []
+        self.anims = {}  # chave -> (valor, quando mudou): transições suaves de passar o mouse
+        self.mix = 0.0  # quanto o último botão desenhado está "aceso" (0 a 1)
+        self.shift = 0  # quanto o último botão subiu (-1) ou afundou (+) — o conteúdo acompanha
         for name, fn in (("<Motion>", self.on_motion), ("<ButtonPress-1>", self.on_press), ("<ButtonRelease-1>", self.on_release),
                          ("<MouseWheel>", self.on_wheel), ("<Leave>", self.on_leave)):
             self.label.bind(name, fn)
@@ -254,31 +259,60 @@ class PixelHost:
         clicked = hover and self.released and self.active == key
         return hover, held, clicked
 
-    # --- peças da interface: preto, branco, linha grossa
+    # --- animação: um número que corre até o alvo em ~120 ms e pede redesenho enquanto corre
+    def ease(self, key, target, speed=8.0):
+        now = time.monotonic()
+        value, last = self.anims.get(key, (target, now))
+        step = min(1.0, (now - last) * speed)
+        value = target if abs(target - value) < .04 else value + (target - value) * max(step, .25)
+        self.anims[key] = (value, now)
+        if value != target:
+            self.win.after(16, self.invalidate)
+        if len(self.anims) > 600:
+            self.anims = {k: v for k, v in self.anims.items() if now - v[1] < 5}
+        return value
+
+    # --- peças da interface: fundo creme, borda preta grossa e sombra dura deslocada
     def chassis(self):
-        self.g.rect(0, 0, self.w, self.h, fill=WHITE)
+        self.g.rect(0, 0, self.w, self.h, fill=CREAM)
         self.g.rect(0, 0, self.w, self.h, line=INK)
 
     def ink(self, hover=False, held=False, selected=False, enabled=True, tone=None):
-        """Cor do conteúdo de uma tecla, em cada estado."""
+        """Cor do conteúdo de uma tecla, em cada estado (segue a animação do último face)."""
         if not enabled:
             return GRAY
         if held or selected or tone:
             return WHITE
-        return BLUE if hover else INK
+        return mix(INK, WHITE, self.mix)
 
-    def face(self, x, y, w, h, hover=False, held=False, selected=False, enabled=True, tone=None):
+    @staticmethod
+    def depth(h):
+        return 1 if h < 18 else 2
+
+    def face(self, x, y, w, h, hover=False, held=False, selected=False, enabled=True, tone=None, key=None):
+        """Tecla: branca com sombra preta; ao passar o mouse fica azul e sobe; ao apertar, afunda."""
         g = self.g
+        d = self.depth(h)
+        t = self.ease(("face", key), 1.0 if hover and enabled else 0.0) if key is not None else (1.0 if hover and enabled else 0.0)
+        self.mix = t if not (held or selected or tone) else 1.0
+        lift = 1 if t > .5 and not held else 0
+        self.shift = d if held else -lift
         if not enabled:
             g.rect(x, y, w, h, fill=WHITE, line=GRAY)
-        elif held or selected:
-            g.rect(x, y, w, h, fill=INK)
+            self.mix = 0.0
+            self.shift = 0
+            return 0
+        if held:
+            g.rect(x + d, y + d, w, h, fill=INK if (selected or tone) else BLUE, line=INK)
+            return 0
+        g.rect(x + d + lift, y + d + lift, w, h, fill=BLUE if selected or (tone and t <= .5) else INK)
+        if selected:
+            fill = INK
         elif tone:
-            g.rect(x, y, w, h, fill=INK if hover else BLUE)
+            fill = mix(INK, BLUE, t)
         else:
-            g.rect(x, y, w, h, fill=WHITE, line=BLUE if hover else INK)
-            if hover:
-                g.rect(x + 1, y + 1, w - 2, h - 2, line=BLUE)
+            fill = mix(WHITE, BLUE, t)
+        g.rect(x - lift, y - lift, w, h, fill=fill, line=INK)
         return 0
 
     def mark_x(self, x, y, size, color):
@@ -287,22 +321,27 @@ class PixelHost:
     def mini(self, key, x, y, size, draw_mark, enabled=True):
         """Botãozinho sem moldura. draw_mark recebe x, y e a cor."""
         hover, held, clicked = self.clickable(key, x, y, size, size, enabled)
-        if held:
-            self.g.rect(x, y, size, size, fill=INK)
-        draw_mark(x, y, GRAY if not enabled else WHITE if held else BLUE if hover else INK)
+        t = self.ease(("mini", key), 1.0 if hover else 0.0)
+        if held or t > 0:
+            self.g.rect(x, y, size, size, fill=INK if held else mix(CREAM, BLUE, t))
+        draw_mark(x, y, GRAY if not enabled else WHITE if held else mix(INK, WHITE, t))
         return clicked
 
     def panel(self, x, y, w, h, title, close=None, frame=True):
         g = self.g
         if frame:
-            g.rect(x, y, w, h, fill=WHITE, line=INK)
+            g.rect(x + 3, y + 3, w, h, fill=INK)
+            g.rect(x, y, w, h, fill=CREAM, line=INK)
             g.rect(x + 1, y + 1, w - 2, h - 2, line=INK)
-        g.hline(x, y + 17, w, INK)
-        g.hline(x, y + 16, w, INK)
-        g.text(x + 7, y + 4, fit(title, w - 34, True), INK, True)
+        g.rect(x, y, w, 18, fill=INK)
+        g.text(x + 7, y + 4, fit(title, w - 34, True), WHITE, True)
         if close:
             mark = lambda bx, by, color: self.mark_x(bx + 1, by + 1, 10, color)
-            if self.mini(("close", title), x + w - 17, y + 2, 13, mark):
+            hover, held, clicked = self.clickable(("close", title), x + w - 17, y + 2, 13, 13)
+            if hover:
+                self.g.rect(x + w - 17, y + 2, 13, 13, fill=BLUE)
+            mark(x + w - 17, y + 2, WHITE)
+            if clicked:
                 self.later(close)
 
     def resize(self, width, height, x=None, y=None):
@@ -394,9 +433,10 @@ class PixelHost:
     def button(self, key, x, y, w, h, text="", on=None, enabled=True, image=None, tone=None, selected=False, bold=False, size=1):
         g = self.g
         hover, held, clicked = self.clickable(key, x, y, w, h, enabled)
-        self.face(x, y, w, h, hover, held, selected, enabled, tone)
+        self.face(x, y, w, h, hover, held, selected, enabled, tone, key=key)
         color = self.ink(hover, held, selected, enabled, tone)
-        heavy = bold or hover or selected
+        heavy = bold or selected
+        x, y = x + self.shift, y + self.shift
         if image:
             g.icon(image, x + 4 if text else x + (w - 14) // 2, y + (h - 14) // 2, 14, color)
         if text:
@@ -421,9 +461,10 @@ class PixelHost:
                     continue
                 field.key(keysym, char, ctrl, self)
         if not flat:
-            g.rect(x, y, w, h, fill=WHITE, line=BLUE if focused or hover else INK)
-            if focused:
-                g.rect(x + 1, y + 1, w - 2, h - 2, line=BLUE)
+            g.rect(x + 2, y + 2, w, h, fill=BLUE if focused else INK)
+            g.rect(x, y, w, h, fill=WHITE, line=INK)
+            if focused or hover:
+                g.rect(x + 1, y + 1, w - 2, h - 2, line=BLUE if focused else INK)
         shown = "•" * len(field.text) if secret else field.text
         before = shown[:field.caret]
         shift = max(0, text_width(before) - (w - 14)) if focused else 0
@@ -448,10 +489,13 @@ class PixelHost:
         if self.active == key and self.down:
             value = low + (high - low) * max(0, min(1, (self.mx - x - 3) / max(1, w - 7)))
             value = int(round(value))
-        g.rect(x, y + 4, w, 3, fill=WHITE, line=INK)
-        knob = x + int((value - low) / max(1, high - low) * (w - 7))
-        g.rect(x, y + 4, knob - x, 3, fill=INK)
-        g.rect(knob, y, 7, 11, fill=BLUE if hover or self.active == key else INK)
+        g.rect(x, y + 3, w, 5, fill=WHITE, line=INK)
+        knob = x + int((value - low) / max(1, high - low) * (w - 9))
+        g.rect(x, y + 3, knob - x + 2, 5, fill=BLUE)
+        g.rect(x, y + 3, w, 5, line=INK)
+        t = self.ease(("slider", key), 1.0 if hover or self.active == key else 0.0)
+        g.rect(knob + 1, y + 1, 9, 11, fill=INK)
+        g.rect(knob, y, 9, 11, fill=mix(WHITE, BLUE, t), line=INK)
         return value
 
     def scrollbar(self, key, x, y, h, total, view, position):
@@ -478,28 +522,38 @@ class PixelHost:
             position = int((self.my - track_y - thumb_h / 2) / room * limit)
         position = max(0, min(limit, position))
         thumb_y = track_y + int(position / limit * room)
-        g.rect(x + 2, thumb_y, 9, thumb_h, fill=BLUE if hover else INK)
+        g.rect(x + 2, thumb_y, 9, thumb_h, fill=BLUE if hover or self.active == f"{key}-track" else INK)
         return position
 
     def checkbox(self, key, x, y, text, value):
         g = self.g
         width = 15 + text_width(text, True)
         hover, held, clicked = self.clickable(key, x, y, width, 12)
-        tone = BLUE if hover else INK
-        g.rect(x, y + 1, 10, 10, fill=tone if value else WHITE, line=tone)
+        g.rect(x + 1, y + 2, 10, 10, fill=INK)
+        g.rect(x, y + 1, 10, 10, fill=BLUE if value else WHITE if not hover else (225, 225, 255), line=INK)
         if value:
             g.icon("x", x + 1, y + 2, 8, WHITE)
-        g.text(x + 15, y + 1, text, tone, hover)
+        g.text(x + 15, y + 1, text, BLUE if hover else INK, hover)
         return (not value) if clicked else value
 
     def segmented(self, key, x, y, w, values, current):
+        g = self.g
         each = w // len(values)
+        g.rect(x + 1, y + 1, each * len(values) + 1, 15, fill=INK)
+        g.rect(x, y, each * len(values) + 1, 15, fill=WHITE, line=INK)
         for i, value in enumerate(values):
             cx = x + i * each
             hover, held, clicked = self.clickable((key, value), cx, y, each, 15)
             selected = value == current
-            self.face(cx, y, each + 1, 15, hover, held, selected)
-            self.g.center(cx, y + 3, each, fit(value, each - 4, hover or selected), self.ink(hover, held, selected), hover or selected)
+            t = self.ease(("seg", key, value), 1.0 if hover and not selected else 0.0)
+            if selected or held:
+                g.rect(cx, y, each + 1, 15, fill=INK)
+            elif t > 0:
+                g.rect(cx + 1, y + 1, each - 1, 13, fill=mix(WHITE, (225, 225, 255), t))
+            if i:
+                g.vline(cx, y, 15, INK)
+            color = WHITE if selected or held else mix(INK, BLUE, t)
+            g.center(cx, y + 3, each, fit(value, each - 4, selected), color, selected)
             if clicked:
                 current = value
         return current
