@@ -3,13 +3,15 @@ import webbrowser
 
 from ..core import prefs
 from ..core.i18n import english
+from . import mascot
 from .pixel import AMBER, BLUE, DARK, INK, RED, text_width
 from .tool_dialogs import ToolDialog
 
 AUTHOR = "Mateus"
 PIX_KEY = "e2a1f4a9-ebfe-4c3c-a531-92a0e7433f14"  # chave aleatória (PicPay): não mostra CPF nem telefone
+BLESSING = "Tudo para honra e glória do Senhor!"
 SPONSOR_URL = ""  # doação em dólar para quem é de fora; vazio = sem esse botão
-VERSION = 3  # aumente quando mudar o recado: ele aparece de novo uma vez para quem já viu
+VERSION = 4  # aumente quando mudar o recado: ele aparece de novo uma vez para quem já viu
 
 
 def lines():
@@ -46,7 +48,7 @@ def wrap(text, width, bold=False, scale=1):
 
 class WelcomeDialog(ToolDialog):
     def __init__(self, app, on_close=None):
-        super().__init__(app, "Treco", 320, 236, on_close)
+        super().__init__(app, "Treco", 320, 258, on_close)
         self.copied = False
         self.host.frame()  # desenha já, sem esperar o mouse passar por cima
 
@@ -67,6 +69,11 @@ class WelcomeDialog(ToolDialog):
             for part in wrap(line, width):
                 g.text(x, y, part, DARK)
                 y += 12
+        y += 8  # assinatura: foto, nome e a frase
+        mascot.draw(g, "mateus", x, y, 28)
+        g.text(x + 36, y + 3, AUTHOR + "  ", INK, True)
+        g.text(x + 36, y + 16, BLESSING + "  ", BLUE)
+        y += 30
         by = self.dh - 30
         right = self.dw - 140, by, 122, 17
         if english():

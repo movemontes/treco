@@ -231,6 +231,10 @@ kbd {
   font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: clamp(18px, 2.6vw, 26px); margin-bottom: 18px;
 }
 .support p { font-size: 19px; max-width: 760px; margin: 0 0 20px; }
+.sign { display: flex; align-items: center; gap: 16px; margin: 0 0 24px; }
+.sign img { width: 72px; height: 72px; border-radius: 50%; border: 3px solid var(--white); box-shadow: 4px 4px 0 var(--ink); flex: none; }
+.sign b { display: block; font-family: var(--wide); font-weight: 800; font-size: 20px; }
+.sign em { display: block; font-size: 17px; opacity: .92; }
 .pix {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
   background: var(--white); color: var(--ink); border: var(--line); padding: 14px 16px;
