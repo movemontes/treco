@@ -156,6 +156,23 @@ section h2 .hl, section h2 em { font-style: normal; box-shadow: inset 0 -.36em 0
 .wheel { display: grid; gap: 40px; grid-template-columns: minmax(0, 420px) 1fr; align-items: center; }
 .wheel img { border: var(--line); box-shadow: 8px 8px 0 var(--blue); background: var(--white); }
 .wheel p { font-size: 20px; margin: 0 0 14px; }
+.spot { background: var(--white); border-top: var(--line); border-bottom: var(--line); }
+.spot h2 { margin-top: 14px; }
+.spot h2 em { font-style: normal; box-shadow: inset 0 -.36em 0 var(--sky); padding: 0 .04em; }
+.steps { list-style: none; counter-reset: step; margin: 18px 0; padding: 0; display: grid; gap: 10px; }
+.steps li {
+  counter-increment: step; position: relative; padding: 10px 14px 10px 54px; font-size: 18px;
+  background: var(--paper); border: var(--line); box-shadow: 4px 4px 0 var(--ink);
+}
+.steps li::before {
+  content: counter(step); position: absolute; left: 0; top: 0; bottom: 0; width: 40px;
+  display: grid; place-items: center; background: var(--blue); color: var(--white);
+  font-family: var(--wide); font-stretch: 125%; font-weight: 900; font-size: 20px; border-right: var(--line);
+}
+.steps li b { box-shadow: inset 0 -.4em 0 var(--sky); }
+.wheel .note { font-size: 16px; color: var(--gray); margin-top: 18px; }
+.cta .more { font-weight: 600; color: var(--ink); text-decoration: none; border-bottom: 3px solid var(--blue); padding-bottom: 1px; }
+.cta .more:hover { color: var(--blue); }
 kbd {
   display: inline-block; border: var(--line); box-shadow: 2px 2px 0 var(--ink);
   padding: 0 8px; font-family: inherit; font-weight: 600; font-size: .9em; background: var(--white);
