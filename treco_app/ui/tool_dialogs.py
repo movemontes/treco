@@ -55,6 +55,41 @@ class ToolDialog(tk.Toplevel):
             self.focus_force()
             self.after(200, lambda: self.alive and self.attributes("-topmost", False))
 
+    def hold_app(self):
+        """Fica por cima do Treco e bloqueia a janela principal até soltar (release_app).
+        Voltar para o Treco vindo de outro app traz esta janela para a frente."""
+        app = self.app
+        app.modal_dialog = self
+        if not getattr(app, "_modal_hook", False):
+            app._modal_hook = True
+
+            def back(_event=None):
+                dialog = getattr(app, "modal_dialog", None)
+                if dialog is not None and dialog.alive:
+                    app.root.after(10, dialog.bring_front)
+            app.win.bind("<FocusIn>", back, add="+")
+        try:
+            if app.win.winfo_viewable():
+                self.transient(app.win)
+        except tk.TclError:
+            pass
+        self.after(150, self._grab)
+
+    def _grab(self):
+        if self.alive and getattr(self.app, "modal_dialog", None) is self:
+            try:
+                self.grab_set()
+            except tk.TclError:
+                self.after(150, self._grab)  # a janela ainda não apareceu
+
+    def release_app(self):
+        if getattr(self.app, "modal_dialog", None) is self:
+            self.app.modal_dialog = None
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
+
     def ui_call(self, fn, *args):
         def run():
             if self.alive:
@@ -79,6 +114,7 @@ class ToolDialog(tk.Toplevel):
         if not self.alive:
             return
         self.alive = False
+        self.release_app()
         self.host.destroy()
         callback = self.on_close_cb
         self.destroy()

@@ -19,5 +19,6 @@ pyobjc-framework-Cocoa; sys_platform == "darwin"
 pyobjc-framework-Quartz; sys_platform == "darwin"
 pyobjc-framework-Vision; sys_platform == "darwin"
 segno==1.6.6
+pyhanko==0.38.2  # assinatura digital de PDF com certificado A1
 
 # Fora do Python: ffmpeg com os filtros whisper e ass

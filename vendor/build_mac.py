@@ -61,6 +61,9 @@ def build_app():
                "--collect-submodules", "treco_app",  # muitos módulos são importados só na hora do uso
                "--collect-all", "tkinterdnd2", "--collect-all", "pypandoc", "--collect-data", "certifi",
                "--collect-submodules", "yt_dlp", "--collect-data", "segno",
+               # assinatura digital de PDF (certificado A1)
+               "--collect-submodules", "pyhanko", "--collect-data", "pyhanko",
+               "--collect-submodules", "pyhanko_certvalidator", "--copy-metadata", "pyhanko",
                "--exclude-module", "PyObjCTest", "--exclude-module", "pytest", "--exclude-module", "IPython",
                "--exclude-module", "matplotlib", "--exclude-module", "win32api", "--exclude-module", "pystray"]
     for name in TOOLS:

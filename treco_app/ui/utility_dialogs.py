@@ -5,7 +5,9 @@ import time
 
 from ..core.log import log_error
 from ..modules import mac_utils
-from .pixel import AMBER, BLUE, DARK, INK, RED, fit
+from . import mascot
+from .pill import pose_for
+from .pixel import AMBER, BLUE, DARK, GRAY, INK, RED, fit
 from .tool_dialogs import ToolDialog
 from .toolkit import TextField
 
@@ -82,15 +84,44 @@ class BatteryDialog(BackgroundDialog):
 
 
 class SpeedDialog(BackgroundDialog):
+    """Teste de internet: os números sobem ao vivo e a janela fica por cima do Treco até acabar."""
+
     def __init__(self, app):
-        super().__init__(app, "Internet", 320, 176)
+        super().__init__(app, "Internet", 340, 160)
         self.processes = []
+        self.live, self.shown = [0.0, 0.0], [0.0, 0.0]
         self.host.frame()
         self.start()
 
     def start(self):
         self.processes = []
-        self.work(mac_utils.speed_test, self.processes)
+        self.live = [0.0, 0.0]   # o que o teste mediu até agora
+        self.shown = [0.0, 0.0]  # o que aparece na tela, chegando aos poucos no medido
+        self.started = time.monotonic()
+        self.hold_app()
+        self.work(mac_utils.speed_test, self.processes, self.on_progress)
+
+    def on_progress(self, down, up):
+        self.ui_call(self._progress, down, up)
+
+    def _progress(self, down, up):
+        self.live = [down, up]
+
+    def finish(self, value, error):
+        super().finish(value, error)
+        if value:
+            self.live = self.shown = [value["down"], value["up"]]
+        self.release_app()
+
+    def spin(self):
+        if self.alive and self.working:
+            for i in (0, 1):  # o número corre até o valor medido, sem pular
+                self.shown[i] += (self.live[i] - self.shown[i]) * .3
+            self.host.invalidate()
+            self.after(50, self.spin)
+
+    def cancel(self):
+        self.close()
 
     def close(self):
         for process in self.processes:  # fechar a janela para o teste
@@ -98,27 +129,61 @@ class SpeedDialog(BackgroundDialog):
                 process.terminate()
         super().close()
 
+    def buddy(self, g, pose, y, bob):
+        size = 76
+        mascot.draw(g, pose, self.dw - 12 - mascot.width(pose, size, g.s), y + bob, size)
+
+    @staticmethod
+    def number(value):
+        return f"{value:.0f}" if value >= 10 else f"{value:.1f}"
+
     def body(self, ui):
         g = ui.g
         x, y, w = 16, 24, self.dw - 32
-        if self.working:
-            self.waiting(ui, x, y, w, "Testando a internet…")
-            g.text(x, y + 38, "Demora uns 20 segundos. O teste é da Apple.", DARK)
-            return
-        if self.error:
-            self.failed(ui, x, y, w)
+        buddy = mascot.enabled()
+        cols_w = w - (84 if buddy else 0)
+        if self.error and not self.working:
+            if buddy:
+                self.buddy(g, "triste", y, 0)
+            self.failed(ui, x, y, cols_w)
+            g.text(x, y + 22, "Confira se o Mac está conectado.", DARK)
         else:
-            r = self.result
-            half = (w - 10) // 2
-            for i, (label, value) in enumerate((("Baixar", r["down"]), ("Enviar", r["up"]))):
+            uploading = self.working and self.live[1] > 0
+            half = (cols_w - 10) // 2
+            values = self.shown if self.working else [self.result["down"], self.result["up"]]
+            for i, label in enumerate(("Baixar", "Enviar")):
                 bx = x + i * (half + 10)
-                g.text(bx, y, label, DARK)
-                g.text(bx, y + 12, f"{value:.0f}" if value >= 10 else f"{value:.1f}", BLUE, True, 3.2)
-                g.text(bx + g.text_w(f"{value:.0f}" if value >= 10 else f"{value:.1f}", True, 3.2) + 4, y + 30, "Mbps", INK, True)
-            y += 54
-            g.text(x, y, fit(mac_utils.speed_words(r["down"]), w, True), INK, True)
-            g.text(x, y + 14, f"Resposta: {r['feel']} ({r['rpm']:.0f} RPM)", DARK)
-        ui.button("again", x, self.dh - 31, 110, 17, "Testar de novo", on=self.start, tone=AMBER, bold=True)
+                active = self.working and (i == 1) == uploading
+                waiting = self.working and i == 1 and not uploading
+                g.text(bx, y, label, BLUE if active else DARK, active)
+                if waiting:
+                    g.text(bx, y + 12, "—", GRAY, True, 3.2)
+                else:
+                    text = self.number(values[i])
+                    size = 3.2 if g.text_w(text, True, 3.2) + 34 <= half else 2.4  # 1000 Mbps ou mais
+                    g.text(bx, y + 12 + round((3.2 - size) * 6), text, BLUE if not self.working or active else INK, True, size)
+                    g.text(bx + g.text_w(text, True, size) + 4, y + 30, "Mbps", INK, True)
+                if active:
+                    g.barber(bx, y + 46, half - 6, 5, int(time.monotonic() * 12), BLUE)
+            y += 58
+            if self.working:
+                step = "Medindo o envio…" if uploading else "Medindo o download…"
+                g.text(x, y, step, INK, True)
+                g.text(x, y + 14, "Demora uns 25 segundos. O teste é da Apple.", DARK)
+            else:
+                r = self.result
+                g.text(x, y, fit(mac_utils.speed_words(r["down"]), cols_w, True), INK, True)
+                g.text(x, y + 14, f"Resposta: {r['feel']} ({r['rpm']:.0f} RPM)", DARK)
+            if buddy:
+                pose = "pensando" if self.working else pose_for("done")
+                bob = int(time.monotonic() * 2.5) % 2 if self.working else 0
+                self.buddy(g, pose, 22, bob)
+        by = self.dh - 31
+        if self.working:
+            ui.button("cancel", x, by, 90, 17, "Cancelar", on=self.cancel, bold=True)
+        else:
+            ui.button("again", x, by, 110, 17, "Testar de novo", on=self.start, tone=AMBER, bold=True)
+            ui.button("done", x + 118, by, 70, 17, "Fechar", on=self.close)
 
 
 class WifiDialog(BackgroundDialog):

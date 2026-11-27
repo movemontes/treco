@@ -21,7 +21,7 @@ else:
                          set_layered_style, user32)
 
 VK_LBUTTON, VK_SHIFT, VK_ESCAPE = 0x01, 0x10, 0x1B
-R_CENTER, R_INNER, R_OUTER_START, R_OUTER = 34, 90, 93, 146
+R_CENTER, R_INNER, R_OUTER_START, R_OUTER = 26, 70, 72, 112
 PAD = 5
 CAT_ICON = {"convert": "convert", "compress": "compress", "edit": "edit", "caption": "caption", "rename": "rename"}
 DIRECT = {"caption": "Legendar", "rename": "Renomear"}  # ações sem segunda roda: soltar em cima já executa
@@ -93,6 +93,23 @@ class Radial:
         self.up_since = None
         self.shown_at = 0
         self.poll()
+        self.root.after(2000, self.warm_up)
+
+    def warm_up(self):
+        """Prepara de antemão o que a primeira abertura gastaria: a roda abre na hora."""
+        try:
+            if MAC:
+                import Quartz  # noqa: F401  (a primeira importação leva uns 160 ms)
+            for kind in ("image", "video", "audio", "doc"):
+                if self.visible:
+                    return
+                self.kind, self.many = kind, False
+                self.categories = categories_for(kind)
+                self.cat = self.sub = self.center = None
+                self.ring = 1.0
+                self.render()
+        except Exception as error:
+            log_error("roda", error)
 
     # --- detecção global
     def poll(self):
@@ -117,7 +134,7 @@ class Radial:
                     self.armed = False
         except Exception as error:
             log_error("roda", error)
-        self.root.after(25, self.poll)
+        self.root.after(16 if self.visible else 25, self.poll)
 
     def release_catcher(self):
         """A proteção só sai depois que o botão foi solto de verdade, mesmo se a roda foi cancelada."""
@@ -276,7 +293,7 @@ class Radial:
         if key in self.cache:
             return self.cache[key]
         c, n = self.c, self.n
-        factor = self.s * 3  # desenha maior e reduz, para o círculo sair liso
+        factor = self.s * 2  # desenha maior e reduz, para o círculo sair liso
         big = n * factor
         art = Image.new("RGB", (big, big), WHITE)
         shape = Image.new("L", (big, big), 0)
@@ -315,14 +332,15 @@ class Radial:
         g.im.paste(art.resize((n * self.s, n * self.s), Image.Resampling.LANCZOS))
         if opened and self.ring >= 0.99:
             label_r = (R_OUTER_START + R_OUTER) / 2
-            room = int((2 * math.pi * label_r / len(items) - 4) / .8)
+            room = int((2 * math.pi * label_r / len(items) - 4) / .76)
             for j, (text, _) in enumerate(items):
                 active = j == self.sub
                 a = math.radians(self.item_angle(j))
-                label = fit(text, min(room, 58), active)
-                x = int(c + label_r * math.cos(a) - text_width(label, active, .8) / 2)
-                y = int(c + label_r * math.sin(a) - LINE * .36)
-                g.text(x, y, label, WHITE if active else INK, active, .8)
+                across = (R_OUTER - R_OUTER_START - 4) / max(abs(math.cos(a)), .01)  # largura que cabe no anel
+                label = fit(text, int(min(room, 58, across / .76)), active)
+                x = int(c + label_r * math.cos(a) - text_width(label, active, .76) / 2)
+                y = int(c + label_r * math.sin(a) - LINE * .34)
+                g.text(x, y, label, WHITE if active else INK, active, .76)
         label_r = (R_CENTER + R_INNER) / 2 + 1
         for i, (cat_id, text, _) in enumerate(self.categories):
             a = math.radians(self.category_angle(i))
@@ -330,7 +348,7 @@ class Radial:
             active = i == self.cat
             color = WHITE if active else (150, 150, 150) if dim else INK
             g.icon(CAT_ICON[cat_id], int(px - 9), int(py - 17), 18, color)
-            g.center(int(px - 30), int(py + 3), 60, text, color, active, .82)
+            g.center(int(px - 30), int(py + 3), 60, text, color, active, .74)
         if self.center is None:
             title = "Vários tipos" if self.kind == "mixed" else KIND_NAME.get(self.kind, "Arquivo")
             if self.cat is not None:
@@ -356,15 +374,14 @@ class Radial:
     def open_ring(self):
         self.ring_token += 1
         token = self.ring_token
-        self.ring = 0.4
+        self.ring = 0.6
         self.paint()
 
         def step(value):
             if token == self.ring_token:
                 self.ring = value
                 self.paint()
-        self.root.after(35, step, 0.72)
-        self.root.after(70, step, 1.0)
+        self.root.after(30, step, 1.0)
 
     # --- eventos de arrastar
     def names_of(self, event):
@@ -457,4 +474,4 @@ class Radial:
             self.root.after(0, lambda: self.app.tool("rename", files))
         else:
             self.root.after(0, lambda: self.app.open_captions(files))
-        self.root.after(420, self.close)
+        self.root.after(150, self.close)

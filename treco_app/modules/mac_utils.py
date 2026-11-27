@@ -90,22 +90,72 @@ def battery():
 
 
 # ---------------------------------------------------------------- internet
-def speed_test(process_holder=None):
-    """Teste da própria Apple (networkQuality). Demora uns 20 segundos."""
-    process = subprocess.Popen(["networkQuality", "-c"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+_LIVE = re.compile(r"Downlink:\s*([\d.]+)\s*([KMG])bps.*?Uplink:\s*([\d.]+)\s*([KMG])bps")
+_UNIT = {"K": .001, "M": 1, "G": 1000}
+
+
+def _mbps(value, unit):
+    return float(value) * _UNIT.get(unit, 1)
+
+
+def _summary(text, pattern):
+    return re.search(pattern, text)
+
+
+def speed_test(process_holder=None, progress=None):
+    """Teste da própria Apple (networkQuality), primeiro baixando e depois enviando.
+    Roda num terminal falso para ler os números ao vivo: progress(baixar, enviar) em Mbps."""
+    import pty
+    import select
+    import time
+    master, slave = pty.openpty()
+    process = subprocess.Popen(["networkQuality", "-s"], stdin=subprocess.DEVNULL, stdout=slave, stderr=slave,
+                               close_fds=True)
+    os.close(slave)
     if process_holder is not None:
         process_holder.append(process)
-    output, error = process.communicate(timeout=90)
+    text, live = "", (0.0, 0.0)
+    deadline = time.monotonic() + 120
+    try:
+        while True:
+            if time.monotonic() > deadline:
+                process.kill()
+                raise RuntimeError("O teste demorou demais")
+            ready, _, _ = select.select([master], [], [], .25)
+            if ready:
+                try:
+                    chunk = os.read(master, 4096)
+                except OSError:
+                    chunk = b""
+                if not chunk:
+                    break
+                text += chunk.decode("utf-8", "replace")
+                found = _LIVE.findall(text[-600:])
+                if found:
+                    down, du, up, uu = found[-1]
+                    live = (_mbps(down, du), _mbps(up, uu))
+                    if progress:
+                        progress(*live)
+            elif process.poll() is not None:
+                break
+    finally:
+        os.close(master)
+    process.wait(timeout=10)
     if process.returncode:
         raise RuntimeError("Sem internet, ou o teste falhou")
-    data = json.loads(output)
-    rpm = data.get("responsiveness") or 0
+    down = _summary(text, r"Downlink capacity:\s*([\d.]+)\s*([KMG])bps")
+    up = _summary(text, r"Uplink capacity:\s*([\d.]+)\s*([KMG])bps")
+    if not (down or up or any(live)):
+        raise RuntimeError("Sem internet, ou o teste falhou")
+    rpm = _summary(text, r"Downlink Responsiveness:[^|\n]*\|\s*(\d+)\s*RPM")
+    ping = _summary(text, r"Idle Latency:\s*([\d.]+)\s*milliseconds")
+    rpm = float(rpm[1]) if rpm else 0
     return {
-        "down": data.get("dl_throughput", 0) / 1e6,  # megabits por segundo
-        "up": data.get("ul_throughput", 0) / 1e6,
+        "down": _mbps(*down.groups()) if down else live[0],  # megabits por segundo
+        "up": _mbps(*up.groups()) if up else live[1],
         "rpm": rpm,
         "feel": "Ótima" if rpm >= 800 else "Boa" if rpm >= 300 else "Lenta",
-        "ping": data.get("base_rtt"),
+        "ping": float(ping[1]) if ping else None,
     }
 
 

@@ -65,6 +65,9 @@ MORE_TOOLS = [
     ("rename", "Renomear", "rename", set(KINDS)),
     ("photos_pdf", "Fotos em PDF", "photos", {"image"}), ("scan", "Escanear", "scan", {"image"}),
     ("slideshow", "Slides em vídeo", "slides", {"image"}),
+    ("tempo", "BPM e tom", "tempo", {"audio", "video"}), ("silence", "Cortar silêncios", "silence", {"audio", "video"}),
+    ("voice", "Limpar a voz", "voice", {"audio", "video"}),
+    ("sign", "Assinar", "sign", {"pdf"}), ("pages", "Páginas", "pages", {"pdf"}), ("redact", "Tarja preta", "redact", {"pdf"}),
 ]
 # ações da aba "Mais" que não dependem de arquivo (só no Mac)
 ACTIONS = [("rec_voice", "Gravar voz", "mic"), ("rec_screen", "Gravar tela", "screen"),

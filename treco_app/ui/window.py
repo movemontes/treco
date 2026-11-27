@@ -43,9 +43,9 @@ RAIL_LABEL = {"av": "Vídeo", "docs": "Docs"}  # nomes curtos no trilho
 LEADS = {"convert": "Escolha o formato novo. O original fica como está.",
          "compress": "Deixa o arquivo menor para mandar ou guardar.",
          "edit": "Gire, corte e ajuste todos os arquivos da lista.",
-         "av": "Legenda, transcrição e gravação de tela e voz.",
+         "av": "Legenda, silêncios, voz limpa, BPM e gravação.",
          "image": "Fotos em PDF, fundo, texto e rostos.",
-         "docs": "Resumo, texto, senha e tradução.",
+         "docs": "Assinatura, páginas, tarja, senha e tradução.",
          "download": "Cole o link de um vídeo da internet.",
          "utils": "Atalhos rápidos para o dia a dia no Mac."}
 # frase curta embaixo do nome de cada ação nos cartões
@@ -56,24 +56,28 @@ DESC = {"direita": "Gira 90° para a direita", "esquerda": "Gira 90° para a esq
         "volume": "Som mais alto ou mais baixo", "clean": "Tira dados escondidos do arquivo",
         "join": "Junta tudo num arquivo só", "split": "Separa as páginas do PDF"}
 # botões de cada categoria (os que não existem neste computador somem sozinhos)
-TAB_TOOLS = {"av": ("caption", "transcribe", "mark", "rec_voice", "rec_screen", "rec_both"),
+TAB_TOOLS = {"av": ("caption", "transcribe", "silence", "voice", "tempo", "mark", "rec_voice", "rec_screen", "rec_both"),
              "image": ("photos_pdf", "scan", "slideshow", "nobg", "ocr", "faces", "mark"),
-             "docs": ("summary", "scan", "ocr", "lock", "translate", "clip", "rename"),
-             "utils": ("cleanup", "uninstall", "cliphist", "scrollshot", "qr", "awake", "speed_test", "wifi", "battery",
-                       "unblock")}
+             "docs": ("sign", "pages", "redact", "summary", "scan", "ocr", "lock", "translate", "clip", "rename"),
+             "utils": ("lens", "dupes", "cleanup", "uninstall", "magic", "cliphist", "scrollshot", "picker", "qr", "awake",
+                       "speed_test", "wifi", "battery", "unblock")}
 CAPTION_TOOL = ("caption", "Legendar", "caption", {"video"})
 QUICK_VERBS = {"trim": "Cortando", "crop": "Recortando", "resize": "Redimensionando", "mute": "Silenciando",
                "speed": "Ajustando", "volume": "Nivelando", "clean": "Limpando", "split": "Separando",
                "transcribe": "Transcrevendo", "nobg": "Recortando", "ocr": "Lendo", "faces": "Borrando",
                "lock": "Protegendo", "unlock": "Destravando", "mark": "Marcando", "translate": "Traduzindo",
-               "photos_pdf": "Juntando", "scan": "Escaneando", "slideshow": "Montando"}
+               "photos_pdf": "Juntando", "scan": "Escaneando", "slideshow": "Montando",
+               "silence": "Cortando", "voice": "Limpando", "pages": "Organizando", "redact": "Escondendo",
+               "sign": "Assinando"}
 RECORD_OPS = ("rec_voice", "rec_screen", "rec_both")
 # utilidades do Mac (ação, nome, ícone); "qr" funciona em qualquer sistema
 UTILITIES = (("cleanup", "Limpar Downloads", "trash"), ("uninstall", "Desinstalar app", "uninstall"),
              ("cliphist", "Histórico de cópias", "history"), ("scrollshot", "Captura com rolagem", "scrollshot"),
              ("summary", "Resumir página", "summary"), ("qr", "QR Code", "qr"), ("awake", "Mac acordado", "awake"),
              ("speed_test", "Teste de internet", "gauge"), ("wifi", "Senha do Wi-Fi", "wifi"),
-             ("battery", "Bateria", "battery"), ("unblock", "Liberar app", "unlock"))
+             ("battery", "Bateria", "battery"), ("unblock", "Liberar app", "unlock"),
+             ("lens", "Lupa de espaço", "lens"), ("dupes", "Arquivos repetidos", "dupes"),
+             ("magic", "Pasta mágica", "magic"), ("picker", "Conta-gotas", "picker"))
 # frase que aparece no alto do menu do botão direito
 TIPS = {"caption": "Escreve a legenda dentro do vídeo", "transcribe": "A fala vira texto (.txt ou .srt)",
         "mark": "Põe seu nome ou marca por cima", "rec_voice": "Grava o microfone até você parar",
@@ -88,7 +92,12 @@ TIPS = {"caption": "Escreve a legenda dentro do vídeo", "transcribe": "A fala v
         "speed_test": "Mede a velocidade da internet", "wifi": "Mostra a senha e o QR do Wi-Fi",
         "battery": "Saúde e ciclos da bateria", "uninstall": "Tira o app e o que ele guardou no Mac",
         "cliphist": "Tudo o que você copiou, para colar de novo", "scrollshot": "Foto de uma página inteira, rolando",
-        "summary": "A IA do Mac resume um link da internet", "unblock": "Abre app que o Mac diz estar danificado"}
+        "summary": "A IA do Mac resume um link da internet", "unblock": "Abre app que o Mac diz estar danificado",
+        "tempo": "Descobre o andamento e o tom da música", "silence": "Tira as pausas da fala",
+        "voice": "Tira chiado, ruído e eco da gravação", "sign": "Põe sua assinatura no PDF",
+        "pages": "Gira, troca de lugar ou tira páginas", "redact": "Esconde CPF e outros dados de verdade",
+        "lens": "Mostra o que ocupa espaço no disco", "dupes": "Acha arquivos iguais para apagar",
+        "magic": "O que cair na pasta é convertido sozinho", "picker": "Pega a cor de qualquer ponto da tela"}
 
 
 def more_tools():
@@ -191,6 +200,9 @@ class App:
                 from .actions_mac import RecorderControl
                 self.recording = RecorderControl(self)
         self.pill = ProgressPill(root, self.scale)
+        from ..modules.magic import Watcher
+        self.magic = Watcher(self.magic_done)
+        root.after(3000, self.magic.start)
         self.tasks = {}
         self.tab = None
         self.url = TextField("", 2048)
@@ -557,11 +569,12 @@ class App:
     def utility_ok(self):
         """Quais utilidades existem neste computador (só pergunta ao sistema uma vez)."""
         if self.utilities is None:
-            found = {"qr"}
+            found = {"qr", "magic"}
             if MAC:
                 from ..modules import mac_utils
                 from ..modules import summary
-                found |= {"cleanup", "awake", "speed_test", "unblock", "uninstall", "cliphist", "scrollshot"}
+                found |= {"cleanup", "awake", "speed_test", "unblock", "uninstall", "cliphist", "scrollshot",
+                          "lens", "dupes", "picker"}
                 if summary.available():
                     found.add("summary")
                 if mac_utils.wifi_device():
@@ -1182,6 +1195,19 @@ class App:
         elif op == "scrollshot":
             from . import scrollshot_ui
             self.safe_dialog(scrollshot_ui.start)
+        elif op in ("lens", "dupes", "magic", "picker"):
+            from . import new_tools as nt
+            if op == "picker":
+                try:
+                    nt.pick_color(self)
+                except Exception as e:
+                    log_error("conta-gotas", e)
+                    self.say("Conta-gotas não funcionou aqui")
+                return
+            if MAC:
+                from .platform_mac import activate
+                activate()
+            self.safe_dialog({"lens": nt.SpaceDialog, "dupes": nt.DupesDialog, "magic": nt.MagicDialog}[op])
         elif op == "awake":
             on = self.awake.toggle()
             self.say("O Mac não vai dormir até você desligar" if on else "O Mac pode dormir de novo", BLUE)
@@ -1542,6 +1568,14 @@ class App:
         elif op == "rename":
             from .tool_dialogs import RenameDialog
             self.safe_dialog(RenameDialog, targets)
+        elif op in ("tempo", "silence", "voice"):
+            from . import new_tools as nt
+            self.safe_dialog({"tempo": nt.TempoDialog, "silence": nt.SilenceDialog, "voice": nt.VoiceDialog}[op], targets)
+        elif op in ("sign", "pages", "redact"):
+            from . import new_tools as nt
+            if len(targets) > 1:
+                self.say("Um PDF por vez: abri o primeiro", BLUE)
+            self.safe_dialog({"sign": nt.SignDialog, "pages": nt.PagesDialog, "redact": nt.RedactDialog}[op], targets[0])
         elif op in ("mute", "volume", "clean"):
             self.run_quick(targets, op, {}, notify=paths is not None)
         elif op in ("trim", "crop", "split"):
@@ -1628,6 +1662,22 @@ class App:
                 result = quick.volume(src, kind, folder, job)
             elif op == "clean":
                 result = quick.clean(src, kind, folder, job)
+            elif op in ("silence", "voice"):
+                from ..modules import audio_tools
+                if op == "silence":
+                    result = audio_tools.cut_silences(src, kind, params["gap"], params["pause"], folder, job)
+                else:
+                    result = audio_tools.clean_voice(src, kind, params["hiss"], params["noise"], params["echo"],
+                                                     params["level"], folder, job)
+            elif op in ("pages", "redact", "sign"):
+                from ..modules import pdftools
+                if op == "pages":
+                    result = pdftools.organize(src, params["pages"], folder, job)
+                elif op == "redact":
+                    result = pdftools.redact(src, params["boxes"], folder, job)
+                else:
+                    result = pdftools.sign(src, params["places"], params["image"], folder, job,
+                                           params.get("certificate"), params.get("password"))
             elif op in ("transcribe", "nobg", "ocr", "faces", "lock", "unlock", "mark", "translate", "scan"):
                 result = self.more_one(src, kind, op, params, folder, job)
             else:
@@ -1864,7 +1914,21 @@ class App:
         self.pool.submit(work)
         return job
 
+    def restart_magic(self):
+        """Liga, desliga ou troca a pasta da Pasta mágica."""
+        self.magic.stop()
+        self.magic.start()
+
+    def magic_done(self, name, ok, detail):
+        def show():
+            if ok:
+                self.pill.flash("Pasta mágica", f"{name} → {detail}")
+            else:
+                self.pill.flash("Pasta mágica: não deu", f"{name}: {detail}")
+        self.root.after(0, show)
+
     def shutdown(self):
+        self.magic.stop()
         for row in self.rows.values():
             if row.job:
                 row.job.cancel()

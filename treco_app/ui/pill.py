@@ -1,8 +1,10 @@
 """Mini janela de progresso que segue o mouse."""
 import itertools
+import os
 import time
 import tkinter as tk
 
+from . import mascot
 from .pixel import BLUE, DARK, INK, RED, WHITE, Gfx, fit
 from ..core.paths import MAC
 
@@ -12,15 +14,26 @@ else:
     from .winapi import cursor_pos, monitor_work_area, push_layered, set_layered_style, user32
 
 WIDTH, HEIGHT = 172, 36
+BUDDY_W, BUDDY_H = 206, 46  # com o Disquetinho
+SHADOW = 3  # sombra dura, como no resto do visual
 OFFSET_X, OFFSET_Y = 18, 20
 FRAME_MS = 33
+# pose do Disquetinho para cada momento
+POSES = {"work": "pensando", "pulse": "pensando", "info": "surpreso", "error": "triste", "done": "joinha"}
+
+
+def pose_for(mode):
+    pose = POSES[mode]
+    if pose == "joinha" and not os.path.exists(os.path.join(mascot.FOLDER, "joinha.png")):
+        pose = "comemorando"  # enquanto não houver o desenho do joinha
+    return pose
 
 
 class ProgressPill:
     def __init__(self, root, scale=2):
         self.root = root
         self.s = scale
-        self.w, self.h = WIDTH * scale, HEIGHT * scale
+        self.w, self.h = (BUDDY_W + SHADOW) * scale, (BUDDY_H + SHADOW) * scale  # o maior tamanho; o menor cabe dentro
         if MAC:
             self.win = self.hwnd = Overlay(self.w, self.h, click_through=True)
         else:
@@ -150,31 +163,56 @@ class ProgressPill:
     def draw(self):
         label, value, mode = self.state()
         phase = int(time.monotonic() * 14) if mode == "pulse" else 0
-        key = (label, None if value is None else int(value * 60), mode, phase)
+        buddy = mascot.enabled()
+        bob = int(time.monotonic() * 2.5) % 2 if buddy and mode in ("work", "pulse") else 0
+        key = (label, None if value is None else int(value * 60), mode, phase, buddy, bob)
         if key != self.last_key:
             self.last_key = key
-            g = Gfx(WIDTH, HEIGHT, self.s)
-            g.rect(0, 0, WIDTH, HEIGHT, fill=WHITE, line=INK)
-            g.rect(1, 1, WIDTH - 2, HEIGHT - 2, line=INK)
-            left, top, inner = 7, 5, WIDTH - 14
-            percent = "" if value is None or mode != "work" else f"{int(value * 100)}%"
-            right = left + inner
-            if percent:
-                g.right(right, top, percent, BLUE, True)
-                right -= 34
-            if mode == "info":
-                g.text(left, top, fit(label, inner, True), INK, True)
-                g.text(left, top + 13, fit(self.info[1], inner), DARK)
-            elif mode == "done":
-                g.text(left, top, "✓", BLUE, True)
-                g.text(left + 11, top, fit(label, right - left - 11, True), BLUE, True)
-            else:
-                g.text(left, top, fit(label, right - left, True), RED if mode == "error" else INK, True)
-            if mode == "info":
-                pass
-            elif value is None:
-                g.barber(left, top + 15, inner, 9, phase, BLUE)
-            else:
-                g.blocks(left, top + 15, inner, 9, value, RED if mode == "error" else BLUE)
-            self.image = g.im.convert("RGBA")
+            self.image = self.render(label, value, mode, phase, buddy, bob)
         push_layered(self.hwnd, self.image, int(self.x), int(self.y))
+
+    def render(self, label, value, mode, phase, buddy, bob):
+        w, h = (BUDDY_W, BUDDY_H) if buddy else (WIDTH, HEIGHT)
+        full_w, full_h = BUDDY_W + SHADOW, BUDDY_H + SHADOW
+        g = Gfx(full_w, full_h, self.s)
+        g.rect(SHADOW, SHADOW, w, h, fill=INK)
+        g.rect(0, 0, w, h, fill=WHITE, line=INK)
+        left, inner_right = 7, w - 7
+        top = 5
+        if buddy:
+            pose = pose_for(mode)
+            size = h - 6
+            pw = mascot.width(pose, size, self.s)
+            mascot.draw(g, pose, 4 + (38 - pw) // 2, 3 + bob, size)
+            left = 46
+            top = (h - 25) // 2
+        inner = inner_right - left
+        percent = "" if value is None or mode != "work" else f"{int(value * 100)}%"
+        right = inner_right
+        if percent:
+            g.right(right, top, percent, BLUE, True)
+            right -= 34
+        if mode == "info":
+            g.text(left, top, fit(label, inner, True), INK, True)
+            g.text(left, top + 13, fit(self.info[1], inner), DARK)
+        elif mode == "done":
+            g.text(left, top, "✓", BLUE, True)
+            g.text(left + 11, top, fit(label, right - left - 11, True), BLUE, True)
+        else:
+            g.text(left, top, fit(label, right - left, True), RED if mode == "error" else INK, True)
+        if mode == "info":
+            pass
+        elif value is None:
+            g.barber(left, top + 15, inner, 9, phase, BLUE)
+        else:
+            g.blocks(left, top + 15, inner, 9, value, RED if mode == "error" else BLUE)
+        image = g.im.convert("RGBA")
+        # só o cartão e a sombra aparecem; o resto da janela fica transparente
+        from PIL import Image, ImageDraw
+        alpha = Image.new("L", image.size, 0)
+        d = ImageDraw.Draw(alpha)
+        s = self.s
+        d.rectangle((0, 0, w * s - 1, h * s - 1), fill=255)
+        d.rectangle((SHADOW * s, SHADOW * s, (w + SHADOW) * s - 1, (h + SHADOW) * s - 1), fill=255)
+        image.putalpha(alpha)
+        return image
