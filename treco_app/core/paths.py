@@ -33,11 +33,11 @@ def bundled_dirs():
 def find_tool(name):
     """Acha um programa. Apps abertos pelo Finder não enxergam o PATH do Terminal."""
     places = bundled_dirs()
-    if MAC:
-        for folder in places:
-            path = os.path.join(folder, name)
-            if os.path.isfile(path) and os.access(path, os.X_OK):
-                return path
+    exe = name + ".exe" if WINDOWS and not name.lower().endswith(".exe") else name
+    for folder in places:  # o que vai dentro do app vem primeiro (no Windows, com .exe)
+        path = os.path.join(folder, exe)
+        if os.path.isfile(path) and (WINDOWS or os.access(path, os.X_OK)):
+            return path
     found = shutil.which(name)
     if found:
         return found

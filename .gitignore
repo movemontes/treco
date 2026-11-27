@@ -32,3 +32,6 @@ design/
 # Clash Grotesk (licença ITF FFL): pode ir dentro do app, mas não em repositório público.
 # Sem ela, o Treco usa a Archivo no texto pequeno.
 treco_app/ui/fonts/ClashGrotesk-*.otf
+
+# ffmpeg do Windows (baixado no notebook)
+vendor/bin/*.exe
