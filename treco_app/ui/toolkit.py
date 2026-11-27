@@ -114,6 +114,16 @@ class PixelHost:
     def hwnd(self):
         return user32.GetParent(self.win.winfo_id()) or self.win.winfo_id()
 
+    def set_owner(self, owner):
+        """Windows: esta janela passa a ser "dona" da principal, como as janelas de diálogo dos outros
+        programas. Fica sempre na frente dela, inclusive quando a pessoa volta de outro app."""
+        if MAC:
+            return
+        try:
+            user32.SetWindowLongPtrW(VP(self.hwnd()), -8, VP(owner.hwnd()))  # GWLP_HWNDPARENT
+        except Exception:
+            pass
+
     def setup_native(self):
         if MAC:
             try:

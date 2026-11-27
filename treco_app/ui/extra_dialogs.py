@@ -23,6 +23,13 @@ def show_file(path):
         subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
 
 
+def open_folder(path):
+    if MAC:
+        subprocess.Popen(["open", path])
+    else:
+        os.startfile(path)
+
+
 def save_folder(app):
     """Onde salvar: a pasta escolhida em "Salvar em", ou a Mesa."""
     folder = app.out_dir or os.path.expanduser("~/Desktop")
@@ -186,7 +193,7 @@ class CleanupDialog(BackgroundDialog):
         else:
             g.text(x, by + 2, "Clique para marcar. Tudo vai para o Lixo e dá para recuperar.", DARK)
         by += 18
-        ui.button("open", x, by, 112, 20, "Abrir Downloads", on=lambda: subprocess.Popen(["open", cleanup.downloads_folder()]))
+        ui.button("open", x, by, 112, 20, "Abrir Downloads", on=lambda: open_folder(cleanup.downloads_folder()))
         label = f"Mandar {len(self.marked)} para o Lixo ({human_size(size)})" if self.marked else "Marque o que não quer"
         ui.button("trash", x + 118, by, w - 118, 20, label, on=self.go, enabled=bool(self.marked), tone=AMBER, bold=True)
         by += 24
@@ -273,7 +280,10 @@ class ClipHistoryDialog(ToolDialog):
         ui.button("clear", x + w - 100, by, 100, 18, "Apagar tudo", on=self.clear, enabled=bool(history and history.items))
 
     def pick(self, text):
-        from .platform_mac import set_clipboard_text
+        if MAC:
+            from .platform_mac import set_clipboard_text
+        else:
+            from ..modules.win_utils import set_clipboard_text
         set_clipboard_text(text)
         self.app.say("Copiado: ⌘V para colar", BLUE)
         self.close()
@@ -412,7 +422,102 @@ class UninstallDialog(BackgroundDialog):
         return ok, failed
 
 
+class WinUninstallDialog(BackgroundDialog):
+    """Windows: lista os programas instalados e abre o desinstalador do próprio programa.
+    Quem remove é o desinstalador dele, como em Configurações > Aplicativos."""
+    ROW = 24
+
+    def __init__(self, app):
+        from ..modules import win_utils
+        super().__init__(app, "Desinstalar programa", 420, 360)
+        self.search = TextField("", 80)
+        self.host.focus = "search"
+        self.chosen = None
+        self.scroll = 0
+        self.message = None
+        self.how = "Nome"
+        self.host.frame()
+        self.work(win_utils.installed_programs)
+
+    def reload(self):
+        """Lê a lista de novo (depois de desinstalar algo, o programa some daqui)."""
+        from ..modules import win_utils
+        self.chosen, self.message, self.scroll = None, None, 0
+        self.work(win_utils.installed_programs)
+
+    def body(self, ui):
+        g = ui.g
+        x, y, w = 14, 24, self.dw - 28
+        if self.working:
+            self.waiting(ui, x, y, w, "Procurando os programas instalados…")
+            return
+        if self.error:
+            self.failed(ui, x, y, w)
+            return
+        sort_w = 150
+        focused = ui.entry("search", x, y, w - sort_w - 6, 20, self.search)
+        if not self.search.text and not focused:
+            g.text(x + 6, y + 6, "Procurar programa", DARK)
+        self.how = ui.segmented("sort", x + w - sort_w, y + 1, sort_w, ["Nome", "Tamanho"], self.how)
+        words = self.search.text.strip().lower()
+        items = [p for p in self.result if words in p["name"].lower() or words in p["publisher"].lower()]
+        if self.how == "Tamanho":  # maiores primeiro; sem tamanho informado vai para o fim
+            items.sort(key=lambda p: -p["size"])
+        top = y + 26
+        height = (self.dh - top - 52) // self.ROW * self.ROW + 2
+        g.rect(x, top, w, height, fill=WHITE, line=INK)
+        visible = height // self.ROW
+        if ui.wheel and ui.over(x, top, w, height):
+            self.scroll += ui.wheel * 2
+        self.scroll = ui.scrollbar("list", x + w - 12, top, height, max(1, len(items)), visible, self.scroll)
+        if not items:
+            g.center(x, top + height // 2 - 5, w, "Nenhum programa com esse nome.", DARK, True)
+        lw = w - 14
+        for n, program in enumerate(items[self.scroll:self.scroll + visible]):
+            ry = top + 1 + n * self.ROW
+            on = self.chosen is program
+            over, held, clicked = ui.clickable(("p", program["name"]), x + 1, ry, lw, self.ROW)
+            if on:
+                g.rect(x + 1, ry, lw, self.ROW - 1, fill=INK)
+            tone = WHITE if on else BLUE if over else INK
+            size = human_size(program["size"]) if program["size"] else ""
+            if size:
+                g.right(x + lw - 4, ry + 3, size, WHITE if on else DARK)
+            g.text(x + 7, ry + 3, fit(program["name"], lw - 20 - text_width(size), True), tone, True)
+            g.text(x + 7, ry + 13, fit(program["publisher"] or program["version"], lw - 14), WHITE if on else GRAY, False, .85)
+            g.hline(x + 1, ry + self.ROW - 1, lw, GRAY)
+            if clicked:
+                self.chosen, self.message = program, None
+        by = top + height + 6
+        if self.message:
+            g.text(x, by + 2, fit(self.message, w, True), BLUE, True)
+        else:
+            g.text(x, by + 2, "Escolha um programa. O desinstalador dele é quem remove.", DARK)
+        by += 18
+        ui.button("cancel", x, by, 70, 20, "Fechar", on=self.close)
+        ui.button("reload", x + 76, by, 80, 20, "Atualizar", on=self.reload)
+        program = self.chosen
+        label = fit(f"Desinstalar {program['name']}", w - 180, True) if program else "Escolha um programa"
+        ui.button("go", x + 162, by, w - 162, 20, label, on=self.go, enabled=bool(program), tone=AMBER, bold=True)
+
+    def go(self):
+        from ..modules import win_utils
+        program = self.chosen
+        if win_utils.running_from_treco(program):
+            self.message = "Para tirar o Treco, use Configurações > Aplicativos."
+            return
+        try:
+            win_utils.run_uninstaller(program)
+            self.message = "O desinstalador abriu. É só seguir por lá."
+        except Exception as error:
+            log_error("desinstalar", error)
+            self.message = "Não consegui abrir o desinstalador"
+
+
 def uninstall_app(app):
+    if not MAC:
+        WinUninstallDialog(app)
+        return
     from ..modules import uninstall
     from .utility_dialogs import choose_app
     try:

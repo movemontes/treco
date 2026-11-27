@@ -798,7 +798,11 @@ def when(timestamp):
 def other_disks():
     """Discos externos e partições que aparecem no Finder (no Mac, dentro de /Volumes)."""
     if not MAC:
-        return []
+        try:
+            from ..modules.win_utils import drives
+            return drives()
+        except Exception:
+            return []
     try:
         found = [e.path for e in os.scandir("/Volumes") if e.is_dir(follow_symlinks=False)
                  and not e.name.startswith(".") and os.path.ismount(e.path)
@@ -1072,7 +1076,8 @@ class SpaceDialog(BackgroundDialog):
         home = os.path.expanduser("~")
         ui.button("home", x, y, 200, 22, "Minha pasta pessoal", on=lambda: self.scan(home), tone=AMBER, bold=True)
         g.text(x + 210, y + 6, "o mais comum: fotos, downloads, apps", DARK)
-        ui.button("disk", x, y + 28, 200, 20, "Disco inteiro", on=lambda: self.scan("/"))
+        whole = "/" if MAC else os.path.splitdrive(home)[0] + "\\"  # no Windows, o disco C:
+        ui.button("disk", x, y + 28, 200, 20, "Disco inteiro", on=lambda: self.scan(whole))
         g.text(x + 210, y + 33, "demora mais", DARK)
         ui.button("other", x, y + 54, 200, 20, "Outra pasta…", on=self.choose_other)
         disks = other_disks()
@@ -1333,6 +1338,16 @@ class ColorDialog(ToolDialog):
 
 def pick_color(app, dialog=None):
     """Abre a lupa do próprio Mac: a pessoa clica em qualquer ponto da tela e a cor vem para cá."""
+    if not MAC:
+        from .win_picker import pick
+
+        def picked(rgb):
+            if dialog is not None and dialog.alive:
+                dialog.show(rgb)
+            else:
+                app.safe_dialog(ColorDialog, rgb)
+        pick(app.root, picked)
+        return
     from AppKit import NSColorSampler, NSColorSpace
 
     def chosen(color):

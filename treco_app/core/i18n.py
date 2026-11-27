@@ -87,9 +87,45 @@ def _load():
     _patterns.sort(key=lambda item: -item[0])
 
 
+# --- Windows: os textos foram escritos pensando no Mac. Aqui eles viram "PC", "Lixeira" e "Ctrl".
+WINDOWS = sys.platform == "win32"
+WIN_TEXT = {  # frases inteiras que mudam de sentido no Windows
+    "Mac acordado": "PC acordado",
+    "Liberar app": "Liberar arquivo",
+    "Desinstalar app": "Desinstalar programa",
+    "Abre app que o Mac diz estar danificado": "Tira o bloqueio de arquivo baixado da internet",
+    "Tira o app e o que ele guardou no Mac": "Abre o desinstalador de um programa",
+    "Mostrar no Finder": "Mostrar na pasta",
+}
+_WIN_WORDS = {
+    "pt": [(r"\bpara o Lixo\b", "para a Lixeira"), (r"\bno Lixo\b", "na Lixeira"), (r"\bdo Lixo\b", "da Lixeira"),
+           (r"\bo Lixo\b", "a Lixeira"), (r"\bLixo\b", "Lixeira"), (r"\bFinder\b", "Explorador de Arquivos"),
+           (r"\bMac\b", "PC"), (r"⌘", "Ctrl+")],
+    "en": [(r"\bTrash\b", "Recycle Bin"), (r"\bFinder\b", "File Explorer"), (r"\bMac\b", "PC"), (r"⌘", "Ctrl+")],
+}
+
+
+def _known(text):
+    """É um texto do próprio Treco (está na lista de traduções)? Nome de arquivo não é."""
+    _load()
+    return text in _exact or any(pattern.match(text) for _, pattern, _ in _patterns)
+
+
 @lru_cache(maxsize=4096)
 def tr(text):
     """O texto no idioma escolhido. Em português (ou sem tradução) devolve o próprio texto."""
+    if not WINDOWS or not text or not isinstance(text, str):
+        return _tr(text)
+    if text in WIN_TEXT:
+        return _tr(WIN_TEXT[text])
+    out = _tr(text)
+    if out != text or _known(text):  # só mexe em texto do Treco, nunca em nome de arquivo
+        for pattern, new in _WIN_WORDS["en" if language() == "en" else "pt"]:
+            out = re.sub(pattern, new, out)
+    return out
+
+
+def _tr(text):
     if not text or not isinstance(text, str) or language() != "en":
         return text
     found = _exact.get(text)

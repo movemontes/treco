@@ -30,7 +30,8 @@ DIST = os.path.join(ROOT, "dist")
 WORK = os.path.join(ROOT, "build")
 APP_DIR = os.path.join(DIST, "Treco")
 TOOLS = ("ffmpeg.exe", "ffprobe.exe")
-ISCC_PLACES = (r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe", r"C:\Program Files\Inno Setup 6\ISCC.exe")
+ISCC_PLACES = (r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe", r"C:\Program Files\Inno Setup 6\ISCC.exe",
+               os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Inno Setup 6", "ISCC.exe"))
 
 
 def run(command, **kw):
@@ -40,10 +41,8 @@ def run(command, **kw):
 
 def make_ico(target):
     """Ícone do Disquetinho, no mesmo desenho do Mac."""
-    from treco_app.ui.icons import app_icon
-    big = app_icon(256)
-    big.save(target, format="ICO", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-    return target
+    from treco_app.ui.icons import save_win_ico
+    return save_win_ico(target)
 
 
 def build_app():
@@ -58,7 +57,6 @@ def build_app():
                "--name", "Treco", "--icon", icon,
                "--distpath", DIST, "--workpath", WORK, "--specpath", WORK,
                "--add-data", f"{ROOT}/treco_app/ui/fonts{sep}treco_app/ui/fonts",
-               "--add-data", f"{ROOT}/treco_app/ui/skin{sep}treco_app/ui/skin",
                "--add-data", f"{ROOT}/treco_app/ui/mascote{sep}treco_app/ui/mascote",
                "--add-data", f"{ROOT}/treco_app/core/en.json{sep}treco_app/core",
                "--collect-submodules", "treco_app",
@@ -67,6 +65,7 @@ def build_app():
                "--collect-submodules", "pyhanko", "--collect-data", "pyhanko",
                "--collect-submodules", "pyhanko_certvalidator", "--copy-metadata", "pyhanko",
                "--hidden-import", "pystray._win32", "--hidden-import", "win32com.client",
+               "--hidden-import", "win32com.shell.shell", "--hidden-import", "win32clipboard",
                "--exclude-module", "pytest", "--exclude-module", "IPython", "--exclude-module", "matplotlib",
                "--exclude-module", "objc", "--exclude-module", "AppKit", "--exclude-module", "Quartz",
                "--exclude-module", "Foundation", "--exclude-module", "Vision"]

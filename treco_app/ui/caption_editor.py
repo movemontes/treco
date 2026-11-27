@@ -64,6 +64,8 @@ class CaptionEditor(tk.Toplevel):
         x = max(0, min(x, self.winfo_screenwidth() - W * scale))
         self.geometry(f"+{x}+{y}")
         self.protocol("WM_DELETE_WINDOW", self.close)
+        if app.root.state() == "normal":  # Windows: fica na frente do Treco ao voltar de outro app
+            self.after(60, lambda: self.alive and self.host.set_owner(app.host))
         self.after(100, self.bring_front)
         self.host.frame()
         self.start_transcription()

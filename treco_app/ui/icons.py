@@ -634,6 +634,21 @@ def app_icon(size=1024):
     return img if size == canvas else img.resize((size, size), Image.LANCZOS)
 
 
+def win_icon(size=256):
+    """Ícone do Windows (barra de tarefas, Iniciar, .exe): o mesmo desenho do Mac, mas sem a
+    margem que a grade do macOS pede, para o Disquetinho não ficar miúdo na barra."""
+    margin, body = 100, 824
+    return app_icon(1024).crop((margin, margin, margin + body, margin + body)).resize((size, size), Image.LANCZOS)
+
+
+def save_win_ico(path):
+    """Grava o .ico com cada tamanho reduzido a partir do desenho grande (fica nítido no 16 e no 24)."""
+    sizes = (16, 20, 24, 32, 40, 48, 64, 128, 256)
+    big = win_icon(256)
+    big.save(path, format="ICO", sizes=[(n, n) for n in sizes])
+    return path
+
+
 def menubar_icon(points=18, scale=2):
     """Ícone da barra de cima: o Disquetinho só com a janelinha e os olhos, vazados.
     É uma "template image", então o macOS pinta de preto ou branco conforme o tema."""

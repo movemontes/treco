@@ -82,7 +82,6 @@ def single_instance():
 
 
 def set_window_icon(root):
-    from .icons import mascot
     if MAC:
         from .icons import app_icon
         from .platform_mac import set_dock_icon
@@ -92,10 +91,14 @@ def set_window_icon(root):
             pass
         return
     try:
-        path = os.path.join(tempfile.gettempdir(), "treco_icon.ico")
-        if not os.path.exists(path):
-            mascot(256).save(path, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (256, 256)])
-        root.iconbitmap(path)
+        # o ícone que vem junto do .exe; rodando pelo código, gera um na pasta temporária
+        path = os.path.join(os.path.dirname(sys.executable), "Treco.ico")
+        if not (getattr(sys, "frozen", False) and os.path.exists(path)):
+            from ..version import VERSION
+            from .icons import save_win_ico
+            path = os.path.join(tempfile.gettempdir(), f"treco_icon_{VERSION}.ico")
+            save_win_ico(path)
+        root.iconbitmap(default=path)
     except Exception:
         pass
 

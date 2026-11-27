@@ -1,4 +1,4 @@
-"""Histórico da área de transferência (só no Mac): guarda os textos copiados para colar de novo depois.
+"""Histórico da área de transferência (Mac e Windows): guarda os textos copiados para colar de novo depois.
 
 Senhas copiadas de gerenciadores de senha (1Password, Bitwarden, Chaves do iCloud...) são ignoradas:
 esses apps marcam a cópia como secreta e o Treco respeita.
@@ -8,7 +8,7 @@ import os
 import threading
 import time
 
-from ..core.paths import data_dir
+from ..core.paths import WINDOWS, data_dir
 
 LIMIT = 200
 SECRET_TYPES = {"org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType",
@@ -73,6 +73,9 @@ class History:
 
 def pasteboard_change():
     """(número da mudança, texto ou None). Texto None quando não é texto ou quando é secreto."""
+    if WINDOWS:
+        from .win_utils import pasteboard_change as windows_change
+        return windows_change()
     from AppKit import NSPasteboard, NSPasteboardTypeString
     board = NSPasteboard.generalPasteboard()
     count = board.changeCount()

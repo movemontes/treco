@@ -9,7 +9,8 @@ import threading
 import time
 
 SKIP_NAMES = {".Trash", ".Spotlight-V100", ".fseventsd", ".DocumentRevisions-V100", ".TemporaryItems",
-              "node_modules", ".git"}
+              "node_modules", ".git",
+              "$Recycle.Bin", "System Volume Information", "$WinREAgent", "Config.Msi"}  # Windows
 # pastas que o macOS protege ou que não fazem sentido mexer
 SKIP_PATHS = ("/System", "/private/var/vm", "/Volumes/com.apple.TimeMachine", "/dev", "/cores")
 # dados guardados de cada app: o macOS pede permissão para cada um e a leitura ficaria parada esperando
@@ -145,7 +146,7 @@ class Tree:
                     if entry.name in SKIP_NAMES:
                         continue
                     try:
-                        if entry.is_symlink():
+                        if entry.is_symlink() or getattr(entry, "is_junction", lambda: False)():
                             continue
                         if entry.is_dir(follow_symlinks=False):
                             path = entry.path

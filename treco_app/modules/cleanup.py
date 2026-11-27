@@ -5,10 +5,15 @@ Nada é apagado de vez: tudo vai para o Lixo e dá para recuperar.
 import os
 import time
 
+from ..core.paths import WINDOWS
+
 DAY = 86400
 
 
 def downloads_folder():
+    if WINDOWS:
+        from .win_utils import downloads_folder as windows_downloads
+        return windows_downloads()
     return os.path.expanduser("~/Downloads")
 
 
@@ -36,7 +41,7 @@ def scan(folder=None):
     except PermissionError:
         raise RuntimeError("O Mac não deixou ver Downloads. Libere em Privacidade > Arquivos e Pastas")
     for name in names:
-        if name.startswith(".") or name == "Icon\r":
+        if name.startswith(".") or name in ("Icon\r", "desktop.ini"):
             continue
         path = os.path.join(folder, name)
         try:
@@ -77,7 +82,10 @@ def _age_words(days):
 
 
 def to_trash(paths):
-    """Manda para o Lixo do Mac. Devolve quantos foram e o que não deu."""
+    """Manda para o Lixo do Mac (ou a Lixeira do Windows). Devolve quantos foram e o que não deu."""
+    if WINDOWS:
+        from .win_utils import to_trash as windows_trash
+        return windows_trash(paths)
     from Foundation import NSFileManager, NSURL
     manager = NSFileManager.defaultManager()
     moved, failed = 0, []

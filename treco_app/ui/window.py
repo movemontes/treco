@@ -28,7 +28,7 @@ try:
 except Exception:
     DND_OK = False
 
-W, H = 440, 540
+W, H = (440, 540) if MAC else (420, 420)  # no Windows, quase quadrada
 MIN_W, MIN_H = 340, 420  # menor que isso os botões não cabem
 RAIL_W, TOP_H, BAR_H = 66, 24, 34  # trilho preto à esquerda, faixa de cima e barra de baixo
 PAD, CHIP_H = 12, 17  # margem da área principal e altura das etiquetas de arquivo
@@ -188,14 +188,20 @@ class App:
         self.recording = None
         self.awake = None
         self.clips = None
-        if MAC:
+        try:  # PC/Mac acordado e histórico de cópias (nos dois sistemas)
             from ..core import prefs
-            from ..modules import recorder
             from ..modules.cliphistory import Watcher
-            from ..modules.mac_utils import KeepAwake
+            if MAC:
+                from ..modules.mac_utils import KeepAwake
+            else:
+                from ..modules.win_utils import KeepAwake
             self.awake = KeepAwake()
             self.clips = Watcher(root, enabled=lambda: prefs.get("clip_history"))
             self.clips.start()
+        except Exception as error:
+            log_error("utilidades", error)
+        if MAC:
+            from ..modules import recorder
             if recorder.available():
                 from .actions_mac import RecorderControl
                 self.recording = RecorderControl(self)
@@ -364,9 +370,10 @@ class App:
             self.want_tip("logo", (lx, 9, 40, 40), mascot.TIPS["logo"])
         t = ui.ease(("logo",), 1.0 if hover or open_ else 0.0)
         lift = 1 if t > .5 and not held else 0
-        g.rect(lx + 2 + lift, 11 + lift, 40, 40, fill=mix(INK, WHITE, t))
-        g.rect(lx - lift, 9 - lift, 40, 40, fill=BLUE)
-        g.center(lx - lift, 18 - lift, 40, "T", WHITE, True, 2.6)
+        if t > 0 or open_:  # quadrado azul atrás do Disquetinho ao passar o mouse
+            g.rect(lx - 2, 7, 44, 44, fill=mix(INK, BLUE, 1.0 if open_ else t))
+        face = mascot.sprite("rosto", 40, g.s)
+        g.put(face, lx + (40 - face.width // g.s) // 2, 9 - lift)
         if clicked:
             self.menu = None if open_ else "Treco"
             ui.later(ui.invalidate)
@@ -397,7 +404,7 @@ class App:
         else:
             if t > 0:
                 g.rect(x, y, w, h, fill=mix(INK, BLUE, t))
-            color = mix(WHITE if ready else (120, 120, 120), WHITE, t)
+            color = WHITE  # sem arquivo também fica branco: cinza parecia botão desligado
         if held:
             g.rect(x, y, w, h, fill=BLUE)
             color = WHITE
@@ -581,6 +588,16 @@ class App:
                     found.add("wifi")
                 if mac_utils.has_battery():
                     found.add("battery")
+            else:
+                found |= {"cleanup", "awake", "speed_test", "unblock", "uninstall", "cliphist", "lens", "dupes", "picker"}
+                try:
+                    from ..modules import win_utils
+                    if win_utils.wifi_device():
+                        found.add("wifi")
+                    if win_utils.has_battery():
+                        found.add("battery")
+                except Exception as error:
+                    log_error("utilidades do Windows", error)
             self.utilities = found
         return self.utilities
 
@@ -757,7 +774,9 @@ class App:
         g.rect(x0, y, self.w - x0, BAR_H, fill=WHITE)
         g.hline(x0, y, self.w - x0, INK)
         g.hline(x0, y + 1, self.w - x0, INK)
-        dest = "Salvar em" if not self.out_dir else os.path.basename(self.out_dir)
+        g.hline(x0, self.h - 1, self.w - x0, INK)  # borda de baixo, igual à de cima (o fundo branco cobria)
+        g.vline(self.w - 1, y, BAR_H, INK)  # e a da direita, no trecho da barra
+        dest ="Salvar em" if not self.out_dir else os.path.basename(self.out_dir)
         buttons = [("open", "folder", "Abrir", self.open_folder), ("dest", "disk", dest, self.choose_dest),
                    ("clear", "trash", "Clear" if english() else "Limpar", self.clear)]
         bx = self.w - PAD
@@ -1189,8 +1208,9 @@ class App:
             self.safe_dialog(SummaryDialog)
         elif op == "uninstall":
             from .extra_dialogs import uninstall_app
-            from .platform_mac import activate
-            activate()
+            if MAC:
+                from .platform_mac import activate
+                activate()
             self.safe_dialog(uninstall_app)
         elif op == "scrollshot":
             from . import scrollshot_ui
@@ -1213,8 +1233,9 @@ class App:
             self.say("O Mac não vai dormir até você desligar" if on else "O Mac pode dormir de novo", BLUE)
         else:
             from . import utility_dialogs as ud
-            from .platform_mac import activate
-            activate()
+            if MAC:
+                from .platform_mac import activate
+                activate()
             self.safe_dialog({"speed_test": ud.SpeedDialog, "wifi": ud.WifiDialog, "battery": ud.BatteryDialog,
                               "unblock": ud.unblock_app}[op])
 

@@ -1,10 +1,15 @@
-"""Janelinhas das utilidades do Mac: bateria, teste de internet, senha do Wi-Fi e liberar app."""
+"""Janelinhas das utilidades: bateria, teste de internet, senha do Wi-Fi e liberar app (Mac e Windows)."""
 import os
 import threading
 import time
 
 from ..core.log import log_error
-from ..modules import mac_utils
+from ..core.paths import MAC
+
+if MAC:
+    from ..modules import mac_utils
+else:  # mesmas funções, feitas com o que vem no Windows
+    from ..modules import win_utils as mac_utils
 from . import mascot
 from .pill import pose_for
 from .pixel import AMBER, BLUE, DARK, GRAY, INK, RED, fit
@@ -169,11 +174,15 @@ class SpeedDialog(BackgroundDialog):
             if self.working:
                 step = "Medindo o envio…" if uploading else "Medindo o download…"
                 g.text(x, y, step, INK, True)
-                g.text(x, y + 14, "Demora uns 25 segundos. O teste é da Apple.", DARK)
+                g.text(x, y + 14, "Demora uns 25 segundos. O teste é da Apple." if MAC else
+                       "Demora uns 25 segundos. O teste é da Cloudflare.", DARK)
             else:
                 r = self.result
                 g.text(x, y, fit(mac_utils.speed_words(r["down"]), cols_w, True), INK, True)
-                g.text(x, y + 14, f"Resposta: {r['feel']} ({r['rpm']:.0f} RPM)", DARK)
+                if r.get("rpm"):
+                    g.text(x, y + 14, f"Resposta: {r['feel']} ({r['rpm']:.0f} RPM)", DARK)
+                elif r.get("ping"):
+                    g.text(x, y + 14, f"Resposta: {r['feel']} ({r['ping']:.0f} ms)", DARK)
             if buddy:
                 pose = "pensando" if self.working else pose_for("done")
                 bob = int(time.monotonic() * 2.5) % 2 if self.working else 0
@@ -220,7 +229,7 @@ class WifiDialog(BackgroundDialog):
             g.text(x, y, "Este Mac não tem redes Wi-Fi guardadas.", INK, True)
             return
         if self.name is None:
-            g.text(x, y, "Qual rede? O Mac vai pedir a senha do computador.", DARK)
+            g.text(x, y, "Qual rede? O Mac vai pedir a senha do computador." if MAC else "Qual rede?", DARK)
             focused = ui.entry("search", x, y + 14, w, 20, self.search)
             if not self.search.text and not focused:
                 g.text(x + 6, y + 20, "Digite parte do nome da rede", DARK)
@@ -235,7 +244,8 @@ class WifiDialog(BackgroundDialog):
             return
         if self.working:
             self.waiting(ui, x, y, w, fit(f"Pegando a senha de {self.name}…", w, True))
-            g.text(x, y + 38, "Digite a senha do Mac na janela que abrir.", DARK)
+            if MAC:
+                g.text(x, y + 38, "Digite a senha do Mac na janela que abrir.", DARK)
             return
         if self.error:
             self.failed(ui, x, y, w)
@@ -257,6 +267,8 @@ class WifiDialog(BackgroundDialog):
 
 def choose_app(start="/Applications", title="Escolha o app que o Mac diz estar danificado", prompt="Liberar"):
     """Janela do Mac para escolher um app. Devolve o caminho, ou None se cancelar."""
+    if not MAC:
+        return choose_file()
     from AppKit import NSModalResponseOK, NSOpenPanel
     from Foundation import NSURL
     from ..core.i18n import tr
@@ -274,6 +286,16 @@ def choose_app(start="/Applications", title="Escolha o app que o Mac diz estar d
     if panel.runModal() != NSModalResponseOK:
         return None
     return str(panel.URL().path())
+
+
+def choose_file():
+    """Windows: escolhe o arquivo baixado que o Windows bloqueia (programa, instalador, planilha...)."""
+    from tkinter import filedialog
+    from ..core.i18n import tr
+    from ..modules.cleanup import downloads_folder
+    path = filedialog.askopenfilename(title=tr("Escolha o arquivo que o Windows bloqueou"),
+                                      initialdir=downloads_folder())
+    return os.path.normpath(path) if path else None
 
 
 class UnblockDialog(BackgroundDialog):
@@ -294,13 +316,18 @@ class UnblockDialog(BackgroundDialog):
             self.failed(ui, x, y, w)
             return
         g.text(x, y, fit(f"{name} liberado.", w, True), BLUE, True, 1.4)
+        label = "Abrir o app" if MAC else "Abrir"
         g.text(x, y + 22, "Pode abrir de novo." if self.result else "Ele já não estava bloqueado.", INK)
-        g.text(x, y + 36, "Se o aviso voltar, abra com o botão direito > Abrir.", DARK)
-        ui.button("open", x, self.dh - 31, 90, 17, "Abrir o app", on=self.open_app, tone=AMBER, bold=True)
+        g.text(x, y + 36, "Se o aviso voltar, abra com o botão direito > Abrir." if MAC else
+               "Só libere o que você baixou de um lugar confiável.", DARK)
+        ui.button("open", x, self.dh - 31, 90, 17, label, on=self.open_app, tone=AMBER, bold=True)
 
     def open_app(self):
         import subprocess
-        subprocess.Popen(["open", self.path])
+        if MAC:
+            subprocess.Popen(["open", self.path])
+        else:
+            os.startfile(self.path)
         self.close()
 
 

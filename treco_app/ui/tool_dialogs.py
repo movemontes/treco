@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image, ImageDraw, ImageOps
 
+from ..core.paths import MAC
 from ..modules import media, quick
 from ..modules.images import ensure_heif
 from .icons import KIND_ICON
@@ -46,7 +47,19 @@ class ToolDialog(tk.Toplevel):
         y = max(0, (screen_h - 56 - height * scale) // 2)
         self.geometry(f"+{x}+{y}")
         self.protocol("WM_DELETE_WINDOW", self.close)
+        self.after(60, self.stay_over_app)
         self.after(100, self.bring_front)
+
+    def stay_over_app(self):
+        """Windows: a janelinha fica presa na frente do Treco (voltar de outro app não a esconde).
+        Só se a principal estiver na tela: aberta pela bandeja ou pela Roda, ela segue solta."""
+        if MAC or not self.alive:
+            return
+        try:
+            if self.app.win.state() == "normal" and self.app.win.winfo_viewable():
+                self.host.set_owner(self.app.host)
+        except tk.TclError:
+            pass
 
     def bring_front(self):
         if self.alive:

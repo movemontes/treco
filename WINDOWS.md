@@ -45,11 +45,16 @@ Guia para o Claude Code no notebook com Windows. O Treco nasceu no Windows e foi
 - [ ] Legenda com o whisper do ffmpeg do Windows.
 - [ ] Converter documentos para PDF (`modules/documents.py` usa o Microsoft Edge).
 
-## Ainda só no Mac (dá para trazer depois)
+## Utilidades no Windows
 
-Em `window.py`, `utility_ok` liga no Windows só o QR e a pasta mágica. Destes, dá para fazer no Windows:
-- **Arquivos repetidos** e **Lupa de espaço** (`modules/space.py`): o código é Python puro. Falta um `to_trash` para Windows (hoje `modules/cleanup.py` usa o `NSFileManager` do Mac). Use a Lixeira do Windows (`SHFileOperation` com `FOF_ALLOWUNDO` pelo pywin32, ou o pacote `send2trash`), nunca apagar de vez.
-- **Teste de internet**: o Windows não tem o `networkQuality`; precisaria de outro jeito.
-- **Conta-gotas de cor**: precisaria de um seletor de tela próprio.
+O que é só do Windows fica em `modules/win_utils.py` (mesmos nomes de função do `mac_utils.py`) e em `ui/win_picker.py`.
+- **Lixeira**: `cleanup.to_trash` usa `SHFileOperation` com `FOF_ALLOWUNDO`. Nunca apaga de vez.
+- **PC acordado**: `SetThreadExecutionState`. **Bateria**: `GetSystemPowerStatus` + `powercfg /batteryreport /xml`.
+- **Teste de internet**: baixa e envia dados de teste da Cloudflare (`speed.cloudflare.com`) por uns 10 s cada.
+- **Wi-Fi**: `netsh wlan` (a saída vem no idioma do Windows). **Liberar arquivo**: apaga o `:Zone.Identifier`.
+- **Histórico de cópias**: `GetClipboardSequenceNumber` e pywin32; respeita os formatos que gerenciadores de senha usam.
+- **Desinstalar programa**: lista o registro de "Adicionar ou remover programas" e abre o desinstalador do próprio programa.
+- **Conta-gotas**: foto da tela por cima de tudo, com lupa; clique pega a cor, Esc cancela.
+- Os textos escritos para o Mac ("Lixo", "Mac", "⌘", "Finder") viram "Lixeira", "PC", "Ctrl+" e "Explorador de Arquivos" em `core/i18n.py` (`WIN_TEXT` e `_WIN_WORDS`), só em textos do próprio Treco.
 
-Os outros (Wi-Fi, bateria, desinstalar, liberar app, manter acordado e resumo) são do Mac.
+Ficam só no Mac: **Resumir página** (usa a IA do macOS) e **Captura com rolagem** (precisaria rolar outro programa sozinho, o que a regra 2 proíbe).

@@ -84,8 +84,8 @@ TOUR = [
      "Escolha uma ação e o Treco faz o resto. O botão direito mostra mais opções."),
     ("oi", "dest", "Onde o pronto vai parar.",
      "Escolha a pasta. O original nunca é movido nem apagado."),
-    ("pensando", "logo", "Mais coisas no T.",
-     "Clique no T para ver o menu do Treco, rever este tour e ligar ou desligar o Disquetinho."),
+    ("pensando", "logo", "Mais coisas em mim.",
+     "Clique no meu rosto, aqui em cima, para ver o menu do Treco, rever este tour e me ligar ou desligar."),
     ("comemorando", None, "Pronto!",
      "Dica: segure Shift ao arrastar um arquivo no Finder para usar a Roda do Shift. Bom proveito!"),
 ]
