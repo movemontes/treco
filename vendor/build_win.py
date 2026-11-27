@@ -9,7 +9,7 @@ Confira com:  vendor\\bin\\ffmpeg.exe -hide_banner -filters | findstr "whisper a
 
 Sai em:
 - dist\\Treco\\Treco.exe            (o app, para testar)
-- dist\\Treco-<versão>-win-setup.exe  (instalador; precisa do Inno Setup 6: https://jrsoftware.org/isinfo.php)
+- dist\\Treco-windows-setup.exe  (instalador, sempre com esse nome porque o site aponta para ele; precisa do Inno Setup 6: https://jrsoftware.org/isinfo.php)
 - dist\\Treco-<versão>-win.zip       (se não houver Inno Setup)
 
 A atualização automática procura no GitHub um arquivo que termina em ".exe": suba o instalador na release.
@@ -87,7 +87,7 @@ DefaultDirName={localappdata}\Programs\Treco
 DefaultGroupName=Treco
 PrivilegesRequired=lowest
 OutputDir=%(dist)s
-OutputBaseFilename=Treco-%(version)s-win-setup
+OutputBaseFilename=Treco-windows-setup
 SetupIconFile=%(icon)s
 UninstallDisplayIcon={app}\Treco.exe
 Compression=lzma2/max
@@ -127,7 +127,7 @@ def build_installer():
         f.write(INNO % {"version": VERSION, "dist": DIST, "app": APP_DIR,
                         "icon": os.path.join(APP_DIR, "Treco.ico")})
     run([iscc, "/Q", script])
-    return os.path.join(DIST, f"Treco-{VERSION}-win-setup.exe")
+    return os.path.join(DIST, "Treco-windows-setup.exe")
 
 
 if __name__ == "__main__":

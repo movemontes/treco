@@ -80,6 +80,9 @@ h1, h2, .wide { font-family: var(--wide); font-stretch: 125%; font-weight: 900; 
   transition: transform .15s var(--ease), box-shadow .15s var(--ease), background .15s;
 }
 .btn:hover { background: var(--blue); transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--ink); }
+.btn.alt { background: var(--white); color: var(--ink); }
+.btn.alt:hover { background: var(--blue); color: var(--white); }
+.release header .dl { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px; }
 .btn:active { transform: translate(5px, 5px); box-shadow: 0 0 0 var(--ink); transition-duration: .05s; }
 .btn.small { padding: 9px 15px; font-size: 14px; box-shadow: 3px 3px 0 var(--blue); }
 .btn.small:hover { box-shadow: 5px 5px 0 var(--ink); }
@@ -188,7 +191,7 @@ kbd {
   font-size: 12px; padding: 3px 9px; letter-spacing: .08em;
 }
 .release .date { color: var(--gray); font-size: 15px; }
-.release header .btn { margin-left: auto; }
+.release header .btn { margin-left: 0; }
 .release .notes { padding: 18px 22px 8px; }
 .notes h3, .notes h4 { font-weight: 600; margin: 18px 0 8px; font-size: 18px; }
 .notes p, .notes li { font-size: 17px; }
@@ -273,7 +276,7 @@ footer a:hover { color: var(--sky); }
   body { font-size: 17px; }
   .top nav .hide-sm { display: none; }
   .wheel { grid-template-columns: 1fr; }
-  .release header .btn { margin-left: 0; }
+  .release header .dl { margin-left: 0; }
   .support { padding: 24px 18px; }
   .pix .btn { margin-left: 0; }
   section { padding: 40px 0; }

@@ -81,6 +81,11 @@
     for (var i = 0; i < assets.length; i++) if (/-mac\.dmg$/i.test(assets[i].name)) return assets[i];
     return null;
   }
+  function exe(release) {
+    var assets = release.assets || [];
+    for (var i = 0; i < assets.length; i++) if (/\.exe$/i.test(assets[i].name)) return assets[i];
+    return null;
+  }
   function size(bytes) { return Math.round(bytes / 1048576) + " MB"; }
   function version(release) { return (release.name && release.name.trim()) || release.tag_name; }
 
@@ -95,12 +100,16 @@
       list = list.filter(function (r) { return !r.draft && !r.prerelease; });
       if (!list.length) throw new Error("empty");
       var latest = list[0], file = dmg(latest);
-      if (meta && file) meta.innerHTML = "<b>" + esc(version(latest)) + "</b> · " + size(file.size) + " · " + meta.getAttribute("data-req");
+      var win = exe(latest);
+      if (meta) meta.innerHTML = "<b>" + esc(version(latest)) + "</b> · " + meta.getAttribute("data-req");
       var html = '<article class="release"><header>' +
         '<span class="ver">' + esc(version(latest)) + "</span>" +
         '<span class="new">' + T.latest + "</span>" +
-        '<span class="date">' + date(latest.published_at) + (file ? " · " + size(file.size) : "") + "</span>" +
-        (file ? '<a class="btn small" href="' + esc(file.browser_download_url) + '">⬇ ' + T.download + "</a>" : "") +
+        '<span class="date">' + date(latest.published_at) + "</span>" +
+        '<span class="dl">' +
+        (file ? '<a class="btn small" href="' + esc(file.browser_download_url) + '">⬇ Mac · ' + size(file.size) + "</a>" : "") +
+        (win ? '<a class="btn small alt" href="' + esc(win.browser_download_url) + '">⬇ Windows · ' + size(win.size) + "</a>" : "") +
+        "</span>" +
         '</header><div class="notes">' + markdown(part(latest.body)) + "</div></article>";
       if (list.length > 1) {
         html += '<details class="older"><summary>' + T.older + " (" + (list.length - 1) + ")</summary>";

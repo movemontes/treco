@@ -30,7 +30,7 @@ Guia para o Claude Code no notebook com Windows. O Treco nasceu no Windows e foi
 ## Testar e montar
 
 - Rodar pelo código: `.venv\Scripts\python treco.py`
-- Montar: `.venv\Scripts\python vendor\build_win.py`. O resultado sai em `dist\Treco\Treco.exe` e `dist\Treco-<versão>-win-setup.exe`.
+- Montar: `.venv\Scripts\python vendor\build_win.py`. O resultado sai em `dist\Treco\Treco.exe` e `dist\Treco-windows-setup.exe` (nome fixo: o botão "Baixar para Windows" do site aponta para ele na última release).
 - A atualização automática procura na release do GitHub um arquivo terminado em `.exe`: suba o instalador nela, ao lado do `Treco-mac.dmg`.
 
 ## O que conferir no Windows (feito depois do Mac, nunca testado lá)
