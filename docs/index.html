@@ -13,7 +13,8 @@
 <meta property="og:url" content="https://movemontes.github.io/treco/">
 <meta property="og:locale" content="pt_BR">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..900&display=swap" rel="stylesheet">
@@ -24,7 +25,7 @@
 
 <div class="top">
   <div class="wrap">
-    <a class="brand" href="./"><span class="mark">T</span><b>TRECO</b></a>
+    <a class="brand" href="./"><img class="mark" src="icone.png" width="40" height="40" alt=""><b>TRECO</b></a>
     <nav>
       <a class="hide-sm" href="#recursos">Recursos</a>
       <a class="hide-sm" href="#novidades">Novidades</a>
@@ -52,11 +53,12 @@
   <section id="roda" class="spot">
     <div class="wrap wheel">
       <img src="roda-shift-pt.gif" width="560" height="550" alt="Roda do Shift: segure Shift e arraste um arquivo no Finder" loading="lazy">
-      <div>
+      <div class="has-buddy">
+        <img class="buddy point" src="mascote/aponta-esquerda.png" width="360" height="360" alt="">
         <span class="tag">O JEITO MAIS RÁPIDO</span>
         <h2>Direto no <em>Finder.</em></h2>
         <p>Nem precisa abrir o Treco. Segure <kbd>⇧ Shift</kbd> enquanto arrasta um arquivo e as ações aparecem em volta do cursor.</p>
-        <ol class="steps">
+        <ol class="wsteps">
           <li>Selecione um ou vários arquivos no Finder.</li>
           <li>Comece a arrastar e segure <kbd>⇧ Shift</kbd>.</li>
           <li>Solte em cima do que quer: <b>converter, comprimir, editar, legendar</b> ou <b>renomear</b>.</li>
@@ -67,7 +69,8 @@
   </section>
 
   <section id="porque">
-    <div class="wrap">
+    <div class="wrap has-buddy">
+      <img class="buddy think" src="mascote/pensando.png" width="360" height="360" alt="" loading="lazy">
       <h2>Por que usar</h2>
       <div class="grid">
         <div class="card"><div class="ico">🔒</div><h3>Nada sai do seu Mac</h3><p>Seus arquivos são processados no próprio computador. Nenhum upload.</p></div>
@@ -140,7 +143,8 @@
   </section>
 
   <section id="instalar">
-    <div class="wrap">
+    <div class="wrap has-buddy">
+      <img class="buddy party" src="mascote/comemorando.png" width="360" height="360" alt="" loading="lazy">
       <h2>Como instalar</h2>
       <ol class="steps">
         <li><a href="https://github.com/movemontes/treco/releases/latest/download/Treco-mac.dmg"><b>Baixe o Treco</b></a> (arquivo <code>.dmg</code>).</li>
@@ -196,6 +200,7 @@
 
 <footer>
   <div class="wrap">
+    <img class="buddy sleep" src="mascote/dormindo.png" width="360" height="360" alt="" loading="lazy">
     <span>Feito por Mateus · Código aberto (<a href="https://github.com/movemontes/treco/blob/main/LICENSE">MIT</a>)</span>
     <a href="https://github.com/movemontes/treco">GitHub</a>
     <a href="en/" data-lang="en">English</a>
