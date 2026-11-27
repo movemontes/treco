@@ -635,19 +635,25 @@ def app_icon(size=1024):
 
 
 def menubar_icon(points=18, scale=2):
-    """Ícone da barra de cima: quadrado cheio com o T vazado. É uma "template image",
-    então o macOS pinta de preto ou branco conforme o tema."""
-    size = points * scale * 4
-    box = int(size * .86)
-    mask = _rounded_mask(box, .24).resize((box, box))
-    letter = Image.new("L", (box, box), 0)
-    draw = ImageDraw.Draw(letter)
-    font = _letter_font(int(box * .78))
-    left, top, right, bottom = draw.textbbox((0, 0), "T", font=font)
-    draw.text(((box - (right - left)) // 2 - left, (box - (bottom - top)) // 2 - top), "T", font=font, fill=255)
-    from PIL import ImageChops
-    alpha = Image.new("L", (size, size), 0)
-    alpha.paste(ImageChops.subtract(mask, letter), ((size - box) // 2, (size - box) // 2))
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    """Ícone da barra de cima: o Disquetinho só com a janelinha e os olhos, vazados.
+    É uma "template image", então o macOS pinta de preto ou branco conforme o tema."""
+    n, m, cut = 512, 24, 120
+    alpha = Image.new("L", (n, n), 0)
+    d = ImageDraw.Draw(alpha)
+    d.rounded_rectangle((m, m, n - m, n - m), 60, fill=255)
+    # canto de cima à direita cortado, como num disquete
+    d.polygon([(n - m - cut, m - 40), (n + 40, m - 40), (n + 40, m + cut + 40),
+               (n - m + 2, m + cut + 2), (n - m - cut, m - 2)], fill=0)
+    d.rounded_rectangle((150, 66, 340, 146), 14, fill=0)   # janelinha
+    d.rectangle((280, 80, 314, 132), fill=255)             # trava
+    for cx in (180, 332):                                  # olhos com pupila
+        d.ellipse((cx - 72, 210, cx + 72, 400), fill=0)
+        d.ellipse((cx - 30, 262, cx + 30, 362), fill=255)
+    img = Image.new("RGBA", (n, n), (0, 0, 0, 0))
     img.putalpha(alpha)
-    return img.resize((points * scale, points * scale), Image.LANCZOS)
+    size = points * scale
+    pad = int(size * .07)
+    small = img.resize((size - 2 * pad, size - 2 * pad), Image.LANCZOS)
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.paste(small, (pad, pad), small)
+    return out

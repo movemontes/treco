@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/capa-en.png" alt="Treco: the file do-it-all" width="100%">
+  <img src="docs/capa-en.png" alt="Treco: the do-it-all file app" width="100%">
 </p>
 
 <p align="center">
